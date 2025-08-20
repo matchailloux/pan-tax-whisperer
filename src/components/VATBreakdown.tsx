@@ -53,10 +53,10 @@ export function VATBreakdown({ data, fileName }: VATBreakdownProps) {
             <TableHeader>
               <TableRow>
                 <TableHead>Pays</TableHead>
-                <TableHead className="text-right">TVA Locale B2C</TableHead>
-                <TableHead className="text-right">TVA Locale B2B</TableHead>
-                <TableHead className="text-right">Intracommunautaire</TableHead>
-                <TableHead className="text-right">TVA OSS</TableHead>
+                <TableHead className="text-right">Ventes domestique B2C</TableHead>
+                <TableHead className="text-right">Ventes domestique B2B</TableHead>
+                <TableHead className="text-right">Ventes Intracommunautaire</TableHead>
+                <TableHead className="text-right">Ventes OSS</TableHead>
                 <TableHead className="text-right">Total</TableHead>
               </TableRow>
             </TableHeader>
@@ -91,7 +91,7 @@ export function VATBreakdown({ data, fileName }: VATBreakdownProps) {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <Card>
           <CardContent className="p-4 text-center">
-            <p className="text-sm text-muted-foreground">TVA Locale B2C</p>
+            <p className="text-sm text-muted-foreground">Ventes domestique B2C</p>
             <p className="text-xl font-bold text-blue-600">
               {formatAmount(data.reduce((sum, item) => sum + item.localB2C, 0))}
             </p>
@@ -100,7 +100,7 @@ export function VATBreakdown({ data, fileName }: VATBreakdownProps) {
         
         <Card>
           <CardContent className="p-4 text-center">
-            <p className="text-sm text-muted-foreground">TVA Locale B2B</p>
+            <p className="text-sm text-muted-foreground">Ventes domestique B2B</p>
             <p className="text-xl font-bold text-green-600">
               {formatAmount(data.reduce((sum, item) => sum + item.localB2B, 0))}
             </p>
@@ -109,7 +109,7 @@ export function VATBreakdown({ data, fileName }: VATBreakdownProps) {
         
         <Card>
           <CardContent className="p-4 text-center">
-            <p className="text-sm text-muted-foreground">Intracommunautaire</p>
+            <p className="text-sm text-muted-foreground">Ventes Intracommunautaire</p>
             <p className="text-xl font-bold text-orange-600">
               {formatAmount(data.reduce((sum, item) => sum + item.intracommunautaire, 0))}
             </p>
@@ -118,7 +118,7 @@ export function VATBreakdown({ data, fileName }: VATBreakdownProps) {
         
         <Card>
           <CardContent className="p-4 text-center">
-            <p className="text-sm text-muted-foreground">TVA OSS</p>
+            <p className="text-sm text-muted-foreground">Ventes OSS</p>
             <p className="text-xl font-bold text-purple-600">
               {formatAmount(data.reduce((sum, item) => sum + item.oss, 0))}
             </p>
