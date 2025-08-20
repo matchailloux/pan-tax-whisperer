@@ -85,19 +85,12 @@ const UploadSection = () => {
     try {
       const content = await uploadedFile.text();
       
-      if (useAutoEngine && useNewEngine) {
+      if (useAutoEngine) {
         const newResult = processVATWithNewRules(content);
         setNewVatData(newResult);
         toast({
-          title: "Nouveau moteur YAML appliqué",
+          title: "Moteur automatique appliqué",
           description: `${newResult.breakdown.length} pays analysés - Sanity checks: ${newResult.sanityCheckGlobal.isValid ? 'Valides ✅' : 'Erreurs ❌'}`,
-        });
-      } else if (useAutoEngine && !useNewEngine) {
-        const reportData = processAmazonVATReport(content);
-        setVatBreakdown(reportData.breakdown);
-        toast({
-          title: "Ancien moteur appliqué",
-          description: `${reportData.breakdown.length} pays analysés (ancien moteur)`,
         });
       } else {
         const rows = parseCSV(content);
@@ -152,18 +145,7 @@ const UploadSection = () => {
                 </Label>
               </div>
               
-              {useAutoEngine && (
-                <div className="flex items-center space-x-2">
-                  <Switch
-                    id="new-engine"
-                    checked={useNewEngine}
-                    onCheckedChange={setUseNewEngine}
-                  />
-                  <Label htmlFor="new-engine" className="text-base">
-                    Nouveau moteur YAML (avec vérifications)
-                  </Label>
-                </div>
-              )}
+              {/* Removed new engine toggle */}
             </div>
             
             {!useAutoEngine && (

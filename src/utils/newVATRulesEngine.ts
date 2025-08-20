@@ -1,7 +1,7 @@
 /**
  * Moteur de règles TVA basé sur les spécifications YAML v1
  * Implémente preprocessing avancé, règles de ventilation complètes et KPI cards
- * Inclut OSS, B2C, B2B, Intracommunautaire, Suisse (VOEC) et Résidu
+ * Inclut OSS, B2C, B2B, Intracommunautaire, Suisse (VOEC) et Autre
  */
 
 export interface VATRuleData {
@@ -297,7 +297,7 @@ function classifyTransaction(transaction: ProcessedVATTransaction): VentilationR
     return { country: arrival, vatType: 'SUISSE' };
   }
   
-  // 6) Résidu (tout le reste)
+  // 6) Autre (tout le reste)
   const fallbackCountry = depart || arrival || 'UNKNOWN';
   if (fallbackCountry !== 'UNKNOWN') {
     return { country: fallbackCountry, vatType: 'RESIDUEL' };
@@ -333,13 +333,13 @@ function generateKPICards(transactions: ProcessedVATTransaction[]): VATKPICard[]
     kpis.push({ title: category.title, amount, count });
   });
   
-  // Résidu (transactions non classifiées dans les 5 catégories principales)
+  // Autre (transactions non classifiées dans les 5 catégories principales)
   const classifiedCount = categories.reduce((sum, cat) => sum + transactions.filter(cat.filter).length, 0);
   const residuelCount = transactions.length - classifiedCount;
   const residuelAmount = grandTotal - categories.reduce((sum, cat) => {
     return sum + transactions.filter(cat.filter).reduce((catSum, t) => catSum + (t.AMOUNT_SIGNED || 0), 0);
   }, 0);
-  kpis.push({ title: 'Autre / Résidu', amount: residuelAmount, count: residuelCount });
+  kpis.push({ title: 'Autre', amount: residuelAmount, count: residuelCount });
   
   return kpis;
 }

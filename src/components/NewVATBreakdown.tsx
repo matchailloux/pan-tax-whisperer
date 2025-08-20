@@ -32,8 +32,22 @@ export function NewVATBreakdown({ report, fileName }: NewVATBreakdownProps) {
     if (title.includes('B2C')) return Users;
     if (title.includes('B2B')) return Building;
     if (title.includes('Intracommunautaire')) return MapPin;
-    if (title.includes('Suisse')) return MapPin;
+    if (title.includes('Export')) return MapPin;
     return AlertTriangle;
+  };
+
+  const getCountryFlag = (countryCode: string) => {
+    const flags: { [key: string]: string } = {
+      'FR': '🇫🇷', 'DE': '🇩🇪', 'IT': '🇮🇹', 'ES': '🇪🇸', 'NL': '🇳🇱', 'BE': '🇧🇪',
+      'AT': '🇦🇹', 'PL': '🇵🇱', 'SE': '🇸🇪', 'DK': '🇩🇰', 'FI': '🇫🇮', 'NO': '🇳🇴',
+      'PT': '🇵🇹', 'IE': '🇮🇪', 'LU': '🇱🇺', 'MT': '🇲🇹', 'CY': '🇨🇾', 'EE': '🇪🇪',
+      'LV': '🇱🇻', 'LT': '🇱🇹', 'SI': '🇸🇮', 'SK': '🇸🇰', 'HR': '🇭🇷', 'BG': '🇧🇬',
+      'RO': '🇷🇴', 'HU': '🇭🇺', 'CZ': '🇨🇿', 'GR': '🇬🇷', 'CH': '🇨🇭', 'GB': '🇬🇧',
+      'US': '🇺🇸', 'CA': '🇨🇦', 'AU': '🇦🇺', 'JP': '🇯🇵', 'KR': '🇰🇷', 'CN': '🇨🇳',
+      'BR': '🇧🇷', 'MX': '🇲🇽', 'IN': '🇮🇳', 'SG': '🇸🇬', 'AE': '🇦🇪', 'SA': '🇸🇦',
+      'TR': '🇹🇷', 'IL': '🇮🇱', 'ZA': '🇿🇦', 'EG': '🇪🇬', 'MA': '🇲🇦', 'NG': '🇳🇬'
+    };
+    return flags[countryCode] || '🏳️';
   };
 
   return (
@@ -166,8 +180,8 @@ export function NewVATBreakdown({ report, fileName }: NewVATBreakdownProps) {
                 <TableHead className="text-right">B2C</TableHead>
                 <TableHead className="text-right">B2B</TableHead>
                 <TableHead className="text-right">Intracom</TableHead>
-                <TableHead className="text-right">Suisse</TableHead>
-                <TableHead className="text-right">Résidu</TableHead>
+                <TableHead className="text-right">Export</TableHead>
+                <TableHead className="text-right">Autre</TableHead>
                 <TableHead className="text-right">Total</TableHead>
               </TableRow>
             </TableHeader>
@@ -175,7 +189,10 @@ export function NewVATBreakdown({ report, fileName }: NewVATBreakdownProps) {
               {breakdown.map((row) => (
                 <TableRow key={row.country}>
                   <TableCell className="font-medium">
-                    <Badge variant="outline">{row.country}</Badge>
+                    <div className="flex items-center gap-2">
+                      <span className="text-2xl">{getCountryFlag(row.country)}</span>
+                      <Badge variant="outline">{row.country}</Badge>
+                    </div>
                   </TableCell>
                   <TableCell className="text-right font-mono">
                     {row.oss !== 0 ? formatAmount(row.oss) : '-'}
@@ -237,7 +254,7 @@ export function NewVATBreakdown({ report, fileName }: NewVATBreakdownProps) {
             </div>
             <div className="text-center p-4 bg-gray-50 rounded-lg">
               <div className="text-2xl font-bold text-gray-600">{rulesApplied.residuelRules}</div>
-              <div className="text-sm text-gray-600">Résidu</div>
+              <div className="text-sm text-gray-600">Autre</div>
             </div>
           </div>
         </CardContent>
