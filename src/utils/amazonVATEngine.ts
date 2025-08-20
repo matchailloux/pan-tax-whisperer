@@ -2,22 +2,20 @@ import { VATBreakdownData } from "@/components/VATBreakdown";
 import { CSVRow } from "./vatProcessor";
 
 /**
- * Moteur de règles TVA Amazon
+ * Moteur de règles TVA Amazon avec preprocessing et montants signés
  * 
- * Objectif : Ventiler la TVA par type de vente et par pays à partir du rapport Amazon
+ * Preprocessing :
+ * - Normalisation des données (trim, uppercase, mapping des valeurs)
+ * - Calcul des montants signés (REFUND en négatif)
  * 
- * Règles générales :
- * - Filtrer uniquement TRANSACTION_TYPE ∈ { "SALES", "REFUND" }
- * - Calculer tous les totaux dans TOTAL_ACTIVITY_VALUE_AMT_VAT_EXCL
- * 
- * Types de ventes :
+ * Règles de ventilation :
  * - OSS : TAX_REPORTING_SCHEME = "UNION-OSS", groupé par SALE_ARRIVAL_COUNTRY
  * - Domestique B2C : REGULAR + BUYER_VAT_NUMBER_COUNTRY vide
  * - Domestique B2B : SALE_DEPART_COUNTRY = BUYER_VAT_NUMBER_COUNTRY 
  * - Intracommunautaire : SALE_DEPART_COUNTRY ≠ BUYER_VAT_NUMBER_COUNTRY (non vide)
  */
 
-export interface AmazonVATRow extends CSVRow {
+export interface AmazonVATRow {
   // Colonnes essentielles pour les règles TVA
   'TRANSACTION_TYPE'?: string;
   'TOTAL_ACTIVITY_VALUE_AMT_VAT_EXCL'?: string;
@@ -27,6 +25,9 @@ export interface AmazonVATRow extends CSVRow {
   'BUYER_VAT_NUMBER_COUNTRY'?: string;
   'BUYER_VAT_NUMBER'?: string;
   
+  // Colonne calculée (montant signé)
+  'AMOUNT_SIGNED'?: number;
+  
   // Colonnes additionnelles pour le contexte
   'ACTIVITY_PERIOD'?: string;
   'SALES_CHANNEL'?: string;
@@ -34,6 +35,9 @@ export interface AmazonVATRow extends CSVRow {
   'SELLER_SKU'?: string;
   'ASIN'?: string;
   'TRANSACTION_CURRENCY_CODE'?: string;
+  
+  // Index signature pour les colonnes dynamiques
+  [key: string]: string | number | undefined;
 }
 
 const EU_COUNTRIES = [
@@ -75,14 +79,18 @@ export interface VATReportData {
 }
 
 /**
- * Processeur principal du rapport Amazon VAT
+ * Processeur principal du rapport Amazon VAT avec preprocessing
  * Applique les règles de ventilation et produit la synthèse attendue
  */
 export function processAmazonVATReport(csvContent: string): VATReportData {
-  const rows = parseAmazonCSV(csvContent);
+  let rows = parseAmazonCSV(csvContent);
+  
+  // Étape 1: Preprocessing des données
+  rows = preprocessData(rows);
+  
   const countryBreakdown: { [country: string]: VATBreakdownData } = {};
 
-  console.log(`🔍 Analyse de ${rows.length} lignes du rapport Amazon VAT`);
+  console.log(`🔍 Analyse de ${rows.length} lignes du rapport Amazon VAT (après preprocessing)`);
 
   rows.forEach((row, index) => {
     // RÈGLE GÉNÉRALE 1: Filtrer uniquement les SALES et REFUND
@@ -91,8 +99,8 @@ export function processAmazonVATReport(csvContent: string): VATReportData {
       return; // Ignorer les autres types de transactions
     }
 
-    // RÈGLE GÉNÉRALE 2: Extraire le montant de TOTAL_ACTIVITY_VALUE_AMT_VAT_EXCL
-    const vatAmount = extractVATAmount(row);
+    // RÈGLE GÉNÉRALE 2: Utiliser le montant signé calculé
+    const vatAmount = row['AMOUNT_SIGNED'] || 0;
     if (vatAmount === 0) {
       return; // Ignorer les transactions sans montant
     }
@@ -212,18 +220,72 @@ function parseCSVLine(line: string): string[] {
 }
 
 /**
- * Extraction du montant TVA selon la règle générale
- * Utilise uniquement TOTAL_ACTIVITY_VALUE_AMT_VAT_EXCL
+ * Preprocessing des données selon les spécifications YAML
  */
-function extractVATAmount(row: AmazonVATRow): number {
-  const value = row['TOTAL_ACTIVITY_VALUE_AMT_VAT_EXCL'];
-  if (value) {
-    const amount = parseFloat(value.replace(/[^\d.-]/g, ''));
-    if (!isNaN(amount)) {
-      return amount; // Conserver le signe: les REFUND (montants négatifs) réduisent les totaux
+function preprocessData(rows: AmazonVATRow[]): AmazonVATRow[] {
+  return rows.map(row => {
+    const processedRow = { ...row };
+    
+    // Étape 1: Trim des colonnes essentielles
+    const trimColumns = ['TRANSACTION_TYPE', 'TAX_REPORTING_SCHEME', 'SALE_ARRIVAL_COUNTRY', 
+                        'SALE_DEPART_COUNTRY', 'BUYER_VAT_NUMBER_COUNTRY'];
+    trimColumns.forEach(col => {
+      if (processedRow[col] && typeof processedRow[col] === 'string') {
+        processedRow[col] = (processedRow[col] as string).trim();
+      }
+    });
+    
+    // Étape 2: Uppercase des codes pays
+    const uppercaseColumns = ['SALE_ARRIVAL_COUNTRY', 'SALE_DEPART_COUNTRY', 'BUYER_VAT_NUMBER_COUNTRY'];
+    uppercaseColumns.forEach(col => {
+      if (processedRow[col] && typeof processedRow[col] === 'string') {
+        processedRow[col] = (processedRow[col] as string).toUpperCase();
+      }
+    });
+    
+    // Étape 3: Normaliser les valeurs vides pour BUYER_VAT_NUMBER_COUNTRY
+    const emptyValues = ['', '(VIDE)', '(VIDES)', 'NULL', 'N/A', '-', '—', 'NONE', ' '];
+    const buyerVatCountry = processedRow['BUYER_VAT_NUMBER_COUNTRY'];
+    if (typeof buyerVatCountry === 'string' && emptyValues.includes(buyerVatCountry)) {
+      processedRow['BUYER_VAT_NUMBER_COUNTRY'] = '';
     }
-  }
-  return 0;
+    
+    // Étape 4: Normaliser TAX_REPORTING_SCHEME
+    const schemeMapping: { [key: string]: string } = {
+      'Union-OSS': 'UNION-OSS',
+      'union-oss': 'UNION-OSS',
+      'Regular': 'REGULAR',
+      'regular': 'REGULAR'
+    };
+    const scheme = processedRow['TAX_REPORTING_SCHEME'];
+    if (typeof scheme === 'string' && schemeMapping[scheme]) {
+      processedRow['TAX_REPORTING_SCHEME'] = schemeMapping[scheme];
+    }
+    
+    // Étape 5: Convertir et calculer AMOUNT_SIGNED
+    const rawAmount = processedRow['TOTAL_ACTIVITY_VALUE_AMT_VAT_EXCL'];
+    let amount = 0;
+    
+    if (typeof rawAmount === 'string' && rawAmount) {
+      // Nettoyer et convertir le montant
+      const cleanedAmount = rawAmount
+        .replace(/,/g, '.') // Remplacer virgules par points
+        .replace(/[^\d.-]/g, ''); // Supprimer symboles monétaires
+      amount = parseFloat(cleanedAmount) || 0;
+    }
+    
+    // Appliquer le signe selon le type de transaction
+    const transactionType = typeof processedRow['TRANSACTION_TYPE'] === 'string' 
+      ? processedRow['TRANSACTION_TYPE'].toUpperCase().trim() 
+      : '';
+    if (transactionType === 'REFUND') {
+      amount = -Math.abs(amount); // Forcer en négatif
+    }
+    
+    processedRow['AMOUNT_SIGNED'] = amount;
+    
+    return processedRow;
+  });
 }
 
 interface TransactionAnalysis {
@@ -358,7 +420,7 @@ function generateCountryAggregates(rows: AmazonVATRow[]): {
     const transactionType = (row['TRANSACTION_TYPE'] || '').toUpperCase().trim();
     if (!['SALES', 'REFUND'].includes(transactionType)) return;
 
-    const vatAmount = extractVATAmount(row);
+    const vatAmount = row['AMOUNT_SIGNED'] || 0;
     if (vatAmount === 0) return;
 
     const analysis = analyzeTransactionByRules(row);
