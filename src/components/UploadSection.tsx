@@ -82,7 +82,8 @@ const UploadSection = () => {
       let breakdown: VATBreakdownData[];
       
       if (useAutoEngine) {
-        breakdown = processAmazonVATReport(content);
+        const reportData = processAmazonVATReport(content);
+        breakdown = reportData.breakdown;
       } else {
         const rows = parseCSV(content);
         breakdown = applyVATRules(rows, rules);

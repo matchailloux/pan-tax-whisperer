@@ -54,11 +54,31 @@ const MARKETPLACE_COUNTRY_MAP: { [key: string]: string } = {
   'amazon.cz': 'CZ'
 };
 
+export interface CountryAggregates {
+  [country: string]: {
+    oss: number;
+    domesticB2C: number;
+    domesticB2B: number;
+    intracommunautaire: number;
+  };
+}
+
+export interface VATReportData {
+  breakdown: VATBreakdownData[];
+  pivot: VATBreakdownData[];
+  aggregates: {
+    oss: CountryAggregates;
+    domesticB2C: CountryAggregates;
+    domesticB2B: CountryAggregates;
+    intracommunautaire: CountryAggregates;
+  };
+}
+
 /**
  * Processeur principal du rapport Amazon VAT
  * Applique les règles de ventilation et produit la synthèse attendue
  */
-export function processAmazonVATReport(csvContent: string): VATBreakdownData[] {
+export function processAmazonVATReport(csvContent: string): VATReportData {
   const rows = parseAmazonCSV(csvContent);
   const countryBreakdown: { [country: string]: VATBreakdownData } = {};
 
@@ -122,15 +142,26 @@ export function processAmazonVATReport(csvContent: string): VATBreakdownData[] {
     countryBreakdown[country].total += vatAmount;
   });
 
-  const result = Object.values(countryBreakdown);
+  const breakdown = Object.values(countryBreakdown);
+  
+  // Générer les agrégats par pays et type de vente
+  const aggregates = generateCountryAggregates(rows);
+  
+  // Créer la vue pivot consolidée
+  const pivot = createPivotView(aggregates);
+  
   console.log('📊 Synthèse TVA générée:', {
-    pays: result.length,
-    totalOSS: result.reduce((sum, c) => sum + c.oss, 0),
-    totalDomestique: result.reduce((sum, c) => sum + c.localB2C + c.localB2B, 0),
-    totalIntracommunautaire: result.reduce((sum, c) => sum + c.intracommunautaire, 0)
+    pays: breakdown.length,
+    totalOSS: breakdown.reduce((sum, c) => sum + c.oss, 0),
+    totalDomestique: breakdown.reduce((sum, c) => sum + c.localB2C + c.localB2B, 0),
+    totalIntracommunautaire: breakdown.reduce((sum, c) => sum + c.intracommunautaire, 0)
   });
 
-  return result;
+  return {
+    breakdown,
+    pivot,
+    aggregates
+  };
 }
 
 function parseAmazonCSV(csvContent: string): AmazonVATRow[] {
@@ -307,4 +338,107 @@ function getMarketplaceCountry(marketplace: string): string | null {
   }
   
   return null;
+}
+
+/**
+ * Génère les agrégats par pays pour chaque type de vente
+ */
+function generateCountryAggregates(rows: AmazonVATRow[]): {
+  oss: CountryAggregates;
+  domesticB2C: CountryAggregates;
+  domesticB2B: CountryAggregates;
+  intracommunautaire: CountryAggregates;
+} {
+  const ossAggregates: CountryAggregates = {};
+  const domesticB2CAggregates: CountryAggregates = {};
+  const domesticB2BAggregates: CountryAggregates = {};
+  const intracommunautaireAggregates: CountryAggregates = {};
+
+  rows.forEach(row => {
+    const transactionType = (row['TRANSACTION_TYPE'] || '').toUpperCase().trim();
+    if (!['SALES', 'REFUND'].includes(transactionType)) return;
+
+    const vatAmount = extractVATAmount(row);
+    if (vatAmount === 0) return;
+
+    const analysis = analyzeTransactionByRules(row);
+    if (!analysis) return;
+
+    const { country, vatType } = analysis;
+
+    // Initialiser le pays dans chaque agrégat s'il n'existe pas
+    if (!ossAggregates[country]) {
+      ossAggregates[country] = { oss: 0, domesticB2C: 0, domesticB2B: 0, intracommunautaire: 0 };
+    }
+    if (!domesticB2CAggregates[country]) {
+      domesticB2CAggregates[country] = { oss: 0, domesticB2C: 0, domesticB2B: 0, intracommunautaire: 0 };
+    }
+    if (!domesticB2BAggregates[country]) {
+      domesticB2BAggregates[country] = { oss: 0, domesticB2C: 0, domesticB2B: 0, intracommunautaire: 0 };
+    }
+    if (!intracommunautaireAggregates[country]) {
+      intracommunautaireAggregates[country] = { oss: 0, domesticB2C: 0, domesticB2B: 0, intracommunautaire: 0 };
+    }
+
+    // Ajouter le montant au bon agrégat selon le type
+    switch (vatType) {
+      case 'OSS':
+        ossAggregates[country].oss += vatAmount;
+        break;
+      case 'DOMESTIC_B2C':
+        domesticB2CAggregates[country].domesticB2C += vatAmount;
+        break;
+      case 'DOMESTIC_B2B':
+        domesticB2BAggregates[country].domesticB2B += vatAmount;
+        break;
+      case 'INTRACOMMUNAUTAIRE':
+        intracommunautaireAggregates[country].intracommunautaire += vatAmount;
+        break;
+    }
+  });
+
+  return {
+    oss: ossAggregates,
+    domesticB2C: domesticB2CAggregates,
+    domesticB2B: domesticB2BAggregates,
+    intracommunautaire: intracommunautaireAggregates
+  };
+}
+
+/**
+ * Crée la vue pivot consolidée par pays
+ */
+function createPivotView(aggregates: {
+  oss: CountryAggregates;
+  domesticB2C: CountryAggregates;
+  domesticB2B: CountryAggregates;
+  intracommunautaire: CountryAggregates;
+}): VATBreakdownData[] {
+  const allCountries = new Set<string>();
+  
+  // Collecter tous les pays présents dans les différents agrégats
+  Object.keys(aggregates.oss).forEach(country => allCountries.add(country));
+  Object.keys(aggregates.domesticB2C).forEach(country => allCountries.add(country));
+  Object.keys(aggregates.domesticB2B).forEach(country => allCountries.add(country));
+  Object.keys(aggregates.intracommunautaire).forEach(country => allCountries.add(country));
+
+  const pivot: VATBreakdownData[] = [];
+
+  allCountries.forEach(country => {
+    const ossAmount = aggregates.oss[country]?.oss || 0;
+    const b2cAmount = aggregates.domesticB2C[country]?.domesticB2C || 0;
+    const b2bAmount = aggregates.domesticB2B[country]?.domesticB2B || 0;
+    const intracomAmount = aggregates.intracommunautaire[country]?.intracommunautaire || 0;
+
+    pivot.push({
+      country,
+      oss: ossAmount,
+      localB2C: b2cAmount,
+      localB2B: b2bAmount,
+      intracommunautaire: intracomAmount,
+      total: ossAmount + b2cAmount + b2bAmount + intracomAmount
+    });
+  });
+
+  return pivot.sort((a, b) => a.country.localeCompare(b.country));
 }
