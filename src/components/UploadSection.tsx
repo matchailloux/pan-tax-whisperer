@@ -4,7 +4,8 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Upload, FileSpreadsheet, CheckCircle, AlertCircle, AlertTriangle } from "lucide-react";
+import { Upload, FileSpreadsheet, CheckCircle, AlertCircle, AlertTriangle, Download } from "lucide-react";
+import * as XLSX from 'xlsx';
 import { useToast } from "@/hooks/use-toast";
 import { RulesConfig, VATRule } from "./RulesConfig";
 import { VATBreakdown, VATBreakdownData } from "./VATBreakdown";
@@ -120,6 +121,72 @@ const UploadSection = () => {
     });
   };
 
+  const exportToExcel = () => {
+    if (!newVatData && !vatBreakdown) return;
+
+    const wb = XLSX.utils.book_new();
+    
+    if (newVatData) {
+      // Export KPI Cards
+      const kpiData = newVatData.kpiCards.map((kpi: any) => ({
+        'Catégorie': kpi.title,
+        'Montant HT (signé)': kpi.metrics.find((m: any) => m.label === 'Montant HT (signé)')?.value || 0,
+        'Transactions': kpi.metrics.find((m: any) => m.label === 'Transactions')?.value || 0
+      }));
+      const kpiWs = XLSX.utils.json_to_sheet(kpiData);
+      XLSX.utils.book_append_sheet(wb, kpiWs, 'Résumé');
+
+      // Export Country Breakdown
+      if (newVatData.breakdown && newVatData.breakdown.length > 0) {
+        const countryData = newVatData.breakdown.map((item: any) => ({
+          'Pays': item.country,
+          'OSS': item.OSS_total || 0,
+          'B2C': item.B2C_total || 0,
+          'B2B': item.B2B_total || 0,
+          'Intracommunautaire': item.Intracom_total || 0,
+          'Export': item.Suisse_total || 0
+        }));
+        const countryWs = XLSX.utils.json_to_sheet(countryData);
+        XLSX.utils.book_append_sheet(wb, countryWs, 'Ventilation par pays');
+      }
+
+      // Export Sanity Check Global
+      if (newVatData.sanityCheckGlobal && newVatData.sanityCheckGlobal.data) {
+        const sanityData = [{
+          'Grand Total': newVatData.sanityCheckGlobal.data['Grand_Total'] || 0,
+          'OSS Total': newVatData.sanityCheckGlobal.data['OSS_Total'] || 0,
+          'REGULAR Total': newVatData.sanityCheckGlobal.data['REGULAR_Total'] || 0,
+          'Suisse Total': newVatData.sanityCheckGlobal.data['Suisse_Total'] || 0,
+          'B2C Total': newVatData.sanityCheckGlobal.data['B2C_Total'] || 0,
+          'B2B Total': newVatData.sanityCheckGlobal.data['B2B_Total'] || 0,
+          'Intracommunautaire Total': newVatData.sanityCheckGlobal.data['Intracom_Total'] || 0,
+          'Autre Total': newVatData.sanityCheckGlobal.data['Autre_Total'] || 0,
+          'Δ GT − (OSS+REG+Suisse+Autre)': newVatData.sanityCheckGlobal.data['Δ GT − (OSS+REG+Suisse+Autre)'] || 0,
+          'Δ REG − (B2C+B2B+Intra)': newVatData.sanityCheckGlobal.data['Δ REG − (B2C+B2B+Intra)'] || 0
+        }];
+        const sanityWs = XLSX.utils.json_to_sheet(sanityData);
+        XLSX.utils.book_append_sheet(wb, sanityWs, 'Vérifications globales');
+      }
+    } else if (vatBreakdown) {
+      // Export old format
+      const oldData = vatBreakdown.map((item: any) => ({
+        'Pays': item.country,
+        'Montant HT': item.amount,
+        'Transactions': item.transactionCount
+      }));
+      const oldWs = XLSX.utils.json_to_sheet(oldData);
+      XLSX.utils.book_append_sheet(wb, oldWs, 'Données');
+    }
+
+    const fileName = `rapport-tva-amazon-${new Date().toISOString().split('T')[0]}.xlsx`;
+    XLSX.writeFile(wb, fileName);
+    
+    toast({
+      title: "Export réussi",
+      description: `Le fichier ${fileName} a été téléchargé.`,
+    });
+  };
+
   return (
     <section className="py-24 bg-gradient-subtle">
       <div className="container mx-auto px-4">
@@ -213,17 +280,31 @@ const UploadSection = () => {
                           {(uploadedFile.size / 1024).toFixed(1)} KB
                         </p>
                       </div>
-                      <Button 
-                        variant="accent" 
-                        size="lg"
-                        onClick={analyzeFile}
-                        disabled={!useAutoEngine && rules.length === 0}
-                      >
-                        {useAutoEngine 
-                          ? "Analyser automatiquement"
-                          : `Analyser le fichier (${rules.length} règle${rules.length > 1 ? 's' : ''})`
-                        }
-                      </Button>
+                      <div className="space-y-3">
+                        <Button 
+                          variant="accent" 
+                          size="lg"
+                          onClick={analyzeFile}
+                          disabled={!useAutoEngine && rules.length === 0}
+                          className="w-full"
+                        >
+                          {useAutoEngine 
+                            ? "Analyser automatiquement"
+                            : `Analyser le fichier (${rules.length} règle${rules.length > 1 ? 's' : ''})`
+                          }
+                        </Button>
+                        
+                        {(newVatData || vatBreakdown) && (
+                          <Button 
+                            variant="outline" 
+                            size="lg"
+                            onClick={resetAnalysis}
+                            className="w-full"
+                          >
+                            Importer un nouveau fichier
+                          </Button>
+                        )}
+                      </div>
                     </div>
                   ) : (
                     <div className="space-y-4">
@@ -273,11 +354,13 @@ const UploadSection = () => {
                 />
                 <div className="mt-6 text-center">
                   <Button 
-                    variant="outline" 
+                    variant="accent" 
                     size="lg"
-                    onClick={resetAnalysis}
+                    onClick={exportToExcel}
+                    className="gap-2"
                   >
-                    Importer un nouveau fichier
+                    <Download className="w-4 h-4" />
+                    Exporter les données
                   </Button>
                 </div>
               </div>
@@ -289,11 +372,13 @@ const UploadSection = () => {
                 <VATBreakdown data={vatBreakdown} fileName={uploadedFile?.name} />
                 <div className="mt-6 text-center">
                   <Button 
-                    variant="outline" 
+                    variant="accent" 
                     size="lg"
-                    onClick={resetAnalysis}
+                    onClick={exportToExcel}
+                    className="gap-2"
                   >
-                    Importer un nouveau fichier
+                    <Download className="w-4 h-4" />
+                    Exporter les données
                   </Button>
                 </div>
               </div>
