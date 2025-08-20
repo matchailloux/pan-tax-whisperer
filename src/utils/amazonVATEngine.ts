@@ -66,7 +66,7 @@ export function processAmazonVATReport(csvContent: string): VATBreakdownData[] {
 
   rows.forEach((row, index) => {
     // RÈGLE GÉNÉRALE 1: Filtrer uniquement les SALES et REFUND
-    const transactionType = row['TRANSACTION_TYPE'] || '';
+    const transactionType = (row['TRANSACTION_TYPE'] || '').toUpperCase().trim();
     if (!['SALES', 'REFUND'].includes(transactionType)) {
       return; // Ignorer les autres types de transactions
     }
@@ -189,7 +189,7 @@ function extractVATAmount(row: AmazonVATRow): number {
   if (value) {
     const amount = parseFloat(value.replace(/[^\d.-]/g, ''));
     if (!isNaN(amount)) {
-      return Math.abs(amount); // Valeur absolue pour traiter les remboursements
+      return amount; // Conserver le signe: les REFUND (montants négatifs) réduisent les totaux
     }
   }
   return 0;
@@ -205,7 +205,7 @@ interface TransactionAnalysis {
  * Analyse chaque transaction selon les 4 règles de ventilation
  */
 function analyzeTransactionByRules(row: AmazonVATRow): TransactionAnalysis | null {
-  const taxReportingScheme = row['TAX_REPORTING_SCHEME'] || '';
+  const taxReportingScheme = (row['TAX_REPORTING_SCHEME'] || '').toUpperCase().trim();
   const saleArrivalCountry = normalizeCountryCode(row['SALE_ARRIVAL_COUNTRY'] || '');
   const saleDepartCountry = normalizeCountryCode(row['SALE_DEPART_COUNTRY'] || '');
   const buyerVatNumberCountry = normalizeCountryCode(row['BUYER_VAT_NUMBER_COUNTRY'] || '');
@@ -226,7 +226,7 @@ function analyzeTransactionByRules(row: AmazonVATRow): TransactionAnalysis | nul
     
     // RÈGLE 2: Ventes domestiques B2C
     // Conditions: REGULAR + SALE_DEPART_COUNTRY défini + BUYER_VAT_NUMBER_COUNTRY vide
-    if (!buyerVatNumberCountry || buyerVatNumber === '') {
+    if (!buyerVatNumberCountry) {
       return { country: saleDepartCountry, vatType: 'DOMESTIC_B2C' };
     }
     
