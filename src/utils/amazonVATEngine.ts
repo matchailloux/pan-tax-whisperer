@@ -1,8 +1,24 @@
 import { VATBreakdownData } from "@/components/VATBreakdown";
 import { CSVRow } from "./vatProcessor";
 
+/**
+ * Moteur de règles TVA Amazon
+ * 
+ * Objectif : Ventiler la TVA par type de vente et par pays à partir du rapport Amazon
+ * 
+ * Règles générales :
+ * - Filtrer uniquement TRANSACTION_TYPE ∈ { "SALES", "REFUND" }
+ * - Calculer tous les totaux dans TOTAL_ACTIVITY_VALUE_AMT_VAT_EXCL
+ * 
+ * Types de ventes :
+ * - OSS : TAX_REPORTING_SCHEME = "UNION-OSS", groupé par SALE_ARRIVAL_COUNTRY
+ * - Domestique B2C : REGULAR + BUYER_VAT_NUMBER_COUNTRY vide
+ * - Domestique B2B : SALE_DEPART_COUNTRY = BUYER_VAT_NUMBER_COUNTRY 
+ * - Intracommunautaire : SALE_DEPART_COUNTRY ≠ BUYER_VAT_NUMBER_COUNTRY (non vide)
+ */
+
 export interface AmazonVATRow extends CSVRow {
-  // Colonnes Amazon VAT selon la spécification utilisateur
+  // Colonnes essentielles pour les règles TVA
   'TRANSACTION_TYPE'?: string;
   'TOTAL_ACTIVITY_VALUE_AMT_VAT_EXCL'?: string;
   'TAX_REPORTING_SCHEME'?: string;
@@ -11,7 +27,7 @@ export interface AmazonVATRow extends CSVRow {
   'BUYER_VAT_NUMBER_COUNTRY'?: string;
   'BUYER_VAT_NUMBER'?: string;
   
-  // Autres colonnes potentiellement utiles
+  // Colonnes additionnelles pour le contexte
   'ACTIVITY_PERIOD'?: string;
   'SALES_CHANNEL'?: string;
   'MARKETPLACE'?: string;
@@ -38,40 +54,61 @@ const MARKETPLACE_COUNTRY_MAP: { [key: string]: string } = {
   'amazon.cz': 'CZ'
 };
 
+/**
+ * Processeur principal du rapport Amazon VAT
+ * Applique les règles de ventilation et produit la synthèse attendue
+ */
 export function processAmazonVATReport(csvContent: string): VATBreakdownData[] {
   const rows = parseAmazonCSV(csvContent);
   const countryBreakdown: { [country: string]: VATBreakdownData } = {};
 
-  rows.forEach(row => {
-    // Filtrer uniquement les SALES et REFUND
+  console.log(`🔍 Analyse de ${rows.length} lignes du rapport Amazon VAT`);
+
+  rows.forEach((row, index) => {
+    // RÈGLE GÉNÉRALE 1: Filtrer uniquement les SALES et REFUND
     const transactionType = row['TRANSACTION_TYPE'] || '';
-    if (!['SALES', 'REFUND'].includes(transactionType)) return;
+    if (!['SALES', 'REFUND'].includes(transactionType)) {
+      return; // Ignorer les autres types de transactions
+    }
 
-    const vatAmount = extractAmazonVATAmount(row);
-    if (vatAmount === 0) return;
+    // RÈGLE GÉNÉRALE 2: Extraire le montant de TOTAL_ACTIVITY_VALUE_AMT_VAT_EXCL
+    const vatAmount = extractVATAmount(row);
+    if (vatAmount === 0) {
+      return; // Ignorer les transactions sans montant
+    }
 
-    const analysis = analyzeTransaction(row);
-    if (!analysis) return;
+    // Analyser la transaction selon les règles de ventilation
+    const analysis = analyzeTransactionByRules(row);
+    if (!analysis) {
+      console.warn(`❌ Ligne ${index + 2}: Transaction non classifiable`, {
+        scheme: row['TAX_REPORTING_SCHEME'],
+        departCountry: row['SALE_DEPART_COUNTRY'],
+        arrivalCountry: row['SALE_ARRIVAL_COUNTRY'],
+        buyerCountry: row['BUYER_VAT_NUMBER_COUNTRY']
+      });
+      return;
+    }
 
     const { country, vatType } = analysis;
 
+    // Initialiser le pays s'il n'existe pas
     if (!countryBreakdown[country]) {
       countryBreakdown[country] = {
         country,
-        localB2C: 0,
-        localB2B: 0,
-        intracommunautaire: 0,
-        oss: 0,
+        localB2C: 0,    // Ventes domestiques B2C
+        localB2B: 0,    // Ventes domestiques B2B
+        intracommunautaire: 0, // Ventes intracommunautaires
+        oss: 0,         // Ventes OSS
         total: 0
       };
     }
 
-    // Ajouter le montant selon le type déterminé automatiquement
+    // Ventiler selon le type déterminé
     switch (vatType) {
-      case 'LOCAL_B2C':
+      case 'DOMESTIC_B2C':
         countryBreakdown[country].localB2C += vatAmount;
         break;
-      case 'LOCAL_B2B':
+      case 'DOMESTIC_B2B':
         countryBreakdown[country].localB2B += vatAmount;
         break;
       case 'INTRACOMMUNAUTAIRE':
@@ -85,7 +122,15 @@ export function processAmazonVATReport(csvContent: string): VATBreakdownData[] {
     countryBreakdown[country].total += vatAmount;
   });
 
-  return Object.values(countryBreakdown);
+  const result = Object.values(countryBreakdown);
+  console.log('📊 Synthèse TVA générée:', {
+    pays: result.length,
+    totalOSS: result.reduce((sum, c) => sum + c.oss, 0),
+    totalDomestique: result.reduce((sum, c) => sum + c.localB2C + c.localB2B, 0),
+    totalIntracommunautaire: result.reduce((sum, c) => sum + c.intracommunautaire, 0)
+  });
+
+  return result;
 }
 
 function parseAmazonCSV(csvContent: string): AmazonVATRow[] {
@@ -135,68 +180,83 @@ function parseCSVLine(line: string): string[] {
   return result;
 }
 
-function extractAmazonVATAmount(row: AmazonVATRow): number {
-  // Utiliser la colonne spécifiée par l'utilisateur
+/**
+ * Extraction du montant TVA selon la règle générale
+ * Utilise uniquement TOTAL_ACTIVITY_VALUE_AMT_VAT_EXCL
+ */
+function extractVATAmount(row: AmazonVATRow): number {
   const value = row['TOTAL_ACTIVITY_VALUE_AMT_VAT_EXCL'];
   if (value) {
     const amount = parseFloat(value.replace(/[^\d.-]/g, ''));
     if (!isNaN(amount)) {
-      return Math.abs(amount);
+      return Math.abs(amount); // Valeur absolue pour traiter les remboursements
     }
   }
-
   return 0;
 }
 
 interface TransactionAnalysis {
   country: string;
-  vatType: 'LOCAL_B2C' | 'LOCAL_B2B' | 'INTRACOMMUNAUTAIRE' | 'OSS';
+  vatType: 'DOMESTIC_B2C' | 'DOMESTIC_B2B' | 'INTRACOMMUNAUTAIRE' | 'OSS';
 }
 
-function analyzeTransaction(row: AmazonVATRow): TransactionAnalysis | null {
+/**
+ * Moteur de règles principal
+ * Analyse chaque transaction selon les 4 règles de ventilation
+ */
+function analyzeTransactionByRules(row: AmazonVATRow): TransactionAnalysis | null {
   const taxReportingScheme = row['TAX_REPORTING_SCHEME'] || '';
-  const saleArrivalCountry = getCountryCode(row['SALE_ARRIVAL_COUNTRY'] || '');
-  const saleDepartCountry = getCountryCode(row['SALE_DEPART_COUNTRY'] || '');
-  const buyerVatNumberCountry = getCountryCode(row['BUYER_VAT_NUMBER_COUNTRY'] || '');
-  const buyerVatNumber = row['BUYER_VAT_NUMBER'] || '';
+  const saleArrivalCountry = normalizeCountryCode(row['SALE_ARRIVAL_COUNTRY'] || '');
+  const saleDepartCountry = normalizeCountryCode(row['SALE_DEPART_COUNTRY'] || '');
+  const buyerVatNumberCountry = normalizeCountryCode(row['BUYER_VAT_NUMBER_COUNTRY'] || '');
+  const buyerVatNumber = (row['BUYER_VAT_NUMBER'] || '').trim();
 
-  // Règle 1: Ventes OSS
+  // RÈGLE 1: Ventes OSS (Union-OSS)
+  // Condition: TAX_REPORTING_SCHEME = "UNION-OSS"
+  // Groupement: SALE_ARRIVAL_COUNTRY
   if (taxReportingScheme === 'UNION-OSS') {
-    // Pour l'OSS, le pays est le pays d'arrivée
     if (saleArrivalCountry) {
       return { country: saleArrivalCountry, vatType: 'OSS' };
     }
+    return null; // OSS sans pays d'arrivée = invalide
   }
 
-  // Règle 2: Ventes REGULAR (domestique B2C, domestique B2B, intracommunautaire)
+  // RÈGLES 2-4: Ventes REGULAR (domestique B2C, domestique B2B, intracommunautaire)
   if (taxReportingScheme === 'REGULAR' && saleDepartCountry) {
     
-    // Ventes domestiques B2C: BUYER_VAT_NUMBER_COUNTRY est vide
-    if (!buyerVatNumberCountry || buyerVatNumberCountry === '' || buyerVatNumber.trim() === '') {
-      return { country: saleDepartCountry, vatType: 'LOCAL_B2C' };
+    // RÈGLE 2: Ventes domestiques B2C
+    // Conditions: REGULAR + SALE_DEPART_COUNTRY défini + BUYER_VAT_NUMBER_COUNTRY vide
+    if (!buyerVatNumberCountry || buyerVatNumber === '') {
+      return { country: saleDepartCountry, vatType: 'DOMESTIC_B2C' };
     }
     
-    // Ventes domestiques B2B: SALE_DEPART_COUNTRY = BUYER_VAT_NUMBER_COUNTRY
+    // RÈGLE 3: Ventes domestiques B2B  
+    // Conditions: SALE_DEPART_COUNTRY = BUYER_VAT_NUMBER_COUNTRY
     if (buyerVatNumberCountry === saleDepartCountry) {
-      return { country: saleDepartCountry, vatType: 'LOCAL_B2B' };
+      return { country: saleDepartCountry, vatType: 'DOMESTIC_B2B' };
     }
     
-    // Ventes intracommunautaires: SALE_DEPART_COUNTRY ≠ BUYER_VAT_NUMBER_COUNTRY
+    // RÈGLE 4: Ventes intracommunautaires
+    // Conditions: SALE_DEPART_COUNTRY ≠ BUYER_VAT_NUMBER_COUNTRY (non vide)
     if (buyerVatNumberCountry && buyerVatNumberCountry !== saleDepartCountry) {
       return { country: saleDepartCountry, vatType: 'INTRACOMMUNAUTAIRE' };
     }
   }
 
-  return null;
+  return null; // Transaction non classifiable
 }
 
-function getCountryCode(countryString: string): string | null {
+/**
+ * Normalisation des codes pays
+ * Convertit les noms de pays et codes vers le format ISO 2 lettres
+ */
+function normalizeCountryCode(countryString: string): string | null {
   const country = countryString.trim().toUpperCase();
   
   // Mapping des noms de pays vers codes ISO
   const countryMapping: { [key: string]: string } = {
     'GERMANY': 'DE',
-    'FRANCE': 'FR',
+    'FRANCE': 'FR', 
     'ITALY': 'IT',
     'SPAIN': 'ES',
     'NETHERLANDS': 'NL',
@@ -205,10 +265,27 @@ function getCountryCode(countryString: string): string | null {
     'BELGIUM': 'BE',
     'AUSTRIA': 'AT',
     'CZECH REPUBLIC': 'CZ',
-    'CZECHIA': 'CZ'
+    'CZECHIA': 'CZ',
+    'DENMARK': 'DK',
+    'FINLAND': 'FI',
+    'GREECE': 'GR',
+    'HUNGARY': 'HU',
+    'IRELAND': 'IE',
+    'LATVIA': 'LV',
+    'LITHUANIA': 'LT',
+    'LUXEMBOURG': 'LU',
+    'MALTA': 'MT',
+    'PORTUGAL': 'PT',
+    'ROMANIA': 'RO',
+    'SLOVAKIA': 'SK',
+    'SLOVENIA': 'SI',
+    'ESTONIA': 'EE',
+    'BULGARIA': 'BG',
+    'CROATIA': 'HR',
+    'CYPRUS': 'CY'
   };
 
-  // Si c'est déjà un code à 2 lettres
+  // Si c'est déjà un code à 2 lettres valide
   if (country.length === 2 && EU_COUNTRIES.includes(country)) {
     return country;
   }
@@ -217,6 +294,9 @@ function getCountryCode(countryString: string): string | null {
   return countryMapping[country] || null;
 }
 
+/**
+ * Utilitaire pour déterminer le pays depuis la marketplace (optionnel)
+ */
 function getMarketplaceCountry(marketplace: string): string | null {
   const marketplaceLower = marketplace.toLowerCase();
   
