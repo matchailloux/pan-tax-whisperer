@@ -89,8 +89,8 @@ const UploadSection = () => {
         const newResult = processVATWithNewRules(content);
         setNewVatData(newResult);
         toast({
-          title: "Nouveau moteur de règles appliqué",
-          description: `${newResult.breakdown.length} pays analysés - Vérification: ${newResult.verification.isValid ? 'Valide ✅' : 'Erreur ❌'}`,
+          title: "Nouveau moteur YAML appliqué",
+          description: `${newResult.breakdown.length} pays analysés - Sanity checks: ${newResult.sanityCheckGlobal.isValid ? 'Valides ✅' : 'Erreurs ❌'}`,
         });
       } else if (useAutoEngine && !useNewEngine) {
         const reportData = processAmazonVATReport(content);
@@ -287,7 +287,8 @@ const UploadSection = () => {
               <div className="mb-8 col-span-full">
                 <NewVATBreakdown 
                   data={newVatData.breakdown} 
-                  verification={newVatData.verification}
+                  sanityCheckGlobal={newVatData.sanityCheckGlobal}
+                  sanityCheckByCountry={newVatData.sanityCheckByCountry}
                   rulesApplied={newVatData.rulesApplied}
                   fileName={uploadedFile?.name} 
                 />

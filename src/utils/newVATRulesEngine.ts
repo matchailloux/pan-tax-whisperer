@@ -1,6 +1,6 @@
 /**
- * Nouveau moteur de règles TVA basé sur les spécifications YAML
- * Implémente le preprocessing, les règles de ventilation et les calculs de vérification
+ * Moteur de règles TVA basé sur les spécifications YAML complètes
+ * Implémente preprocessing, règles de ventilation, vues pivotées et sanity checks
  */
 
 export interface VATRuleData {
@@ -12,27 +12,38 @@ export interface VATRuleData {
   total: number;
 }
 
-export interface VerificationResult {
-  totalFromRules: number;
-  totalFromCSV: number;
-  difference: number;
+export interface SanityCheckGlobal {
+  grandTotal: number;
+  ossTotal: number;
+  regularTotal: number;
+  b2cTotal: number;
+  b2bTotal: number;
+  intracomTotal: number;
+  diffGrandTotalVsSum: number;
+  diffRegularVsComponents: number;
   isValid: boolean;
-  details: {
-    ossTotal: number;
-    domesticB2CTotal: number;
-    domesticB2BTotal: number;
-    intracommunautaireTotal: number;
-  };
 }
 
-export interface VATReport {
+export interface SanityCheckByCountry {
+  country: string;
+  regularTotal: number;
+  b2cTotal: number;
+  b2bTotal: number;
+  intracomTotal: number;
+  difference: number;
+  isValid: boolean;
+}
+
+export interface DetailedVATReport {
   breakdown: VATRuleData[];
-  verification: VerificationResult;
+  sanityCheckGlobal: SanityCheckGlobal;
+  sanityCheckByCountry: SanityCheckByCountry[];
   rulesApplied: {
     ossRules: number;
     domesticB2CRules: number;
     domesticB2BRules: number;
     intracommunautaireRules: number;
+    totalProcessed: number;
   };
 }
 
@@ -54,9 +65,9 @@ const EU_COUNTRIES = [
 ];
 
 /**
- * Moteur principal de traitement du rapport Amazon VAT
+ * Moteur principal de traitement du rapport Amazon VAT selon spécifications YAML
  */
-export function processVATWithNewRules(csvContent: string): VATReport {
+export function processVATWithNewRules(csvContent: string): DetailedVATReport {
   // Étape 1: Parser le CSV
   let transactions = parseAmazonCSV(csvContent);
   
@@ -66,21 +77,26 @@ export function processVATWithNewRules(csvContent: string): VATReport {
   // Étape 3: Appliquer les règles de ventilation
   const breakdown = applyVATVentilationRules(transactions);
   
-  // Étape 4: Calculs de vérification
-  const verification = performVerificationChecks(transactions, breakdown);
+  // Étape 4: Sanity checks globaux
+  const sanityCheckGlobal = performGlobalSanityCheck(transactions, breakdown);
   
-  // Étape 5: Statistiques sur les règles appliquées
+  // Étape 5: Sanity checks par pays
+  const sanityCheckByCountry = performCountrySanityCheck(transactions, breakdown);
+  
+  // Étape 6: Statistiques des règles appliquées
   const rulesApplied = calculateRulesStatistics(transactions);
   
-  console.log('🎯 Nouveau moteur de règles TVA appliqué:', {
+  console.log('🎯 Moteur de règles TVA YAML appliqué:', {
     transactions: transactions.length,
     pays: breakdown.length,
-    verification: verification.isValid ? '✅ Valide' : '❌ Erreur'
+    sanityGlobal: sanityCheckGlobal.isValid ? '✅ Valide' : '❌ Erreur',
+    sanityPays: sanityCheckByCountry.filter(c => !c.isValid).length === 0 ? '✅ Valide' : '❌ Erreurs détectées'
   });
   
   return {
     breakdown,
-    verification,
+    sanityCheckGlobal,
+    sanityCheckByCountry,
     rulesApplied
   };
 }
@@ -266,47 +282,116 @@ function applyVentilationRule(transaction: AmazonVATTransaction): VentilationRes
 }
 
 /**
- * Calculs de vérification selon les spécifications YAML
+ * Sanity checks globaux selon spécifications YAML
  */
-function performVerificationChecks(transactions: AmazonVATTransaction[], breakdown: VATRuleData[]): VerificationResult {
-  // Calculer le total depuis les règles
-  const ossTotal = breakdown.reduce((sum, item) => sum + item.oss, 0);
-  const domesticB2CTotal = breakdown.reduce((sum, item) => sum + item.domesticB2C, 0);
-  const domesticB2BTotal = breakdown.reduce((sum, item) => sum + item.domesticB2B, 0);
-  const intracommunautaireTotal = breakdown.reduce((sum, item) => sum + item.intracommunautaire, 0);
-  
-  const totalFromRules = ossTotal + domesticB2CTotal + domesticB2BTotal + intracommunautaireTotal;
-  
-  // Calculer le total depuis le CSV (toutes transactions SALES/REFUND)
-  const totalFromCSV = transactions
+function performGlobalSanityCheck(transactions: AmazonVATTransaction[], breakdown: VATRuleData[]): SanityCheckGlobal {
+  // Grand total (toutes transactions filtrées SALES/REFUND)
+  const grandTotal = transactions
     .filter(t => ['SALES', 'REFUND'].includes((t['TRANSACTION_TYPE'] || '').toUpperCase().trim()))
     .reduce((sum, t) => sum + (t['AMOUNT_SIGNED'] || 0), 0);
   
-  const difference = Math.abs(totalFromRules - totalFromCSV);
-  const isValid = difference < 0.01; // Tolérance de 1 centime pour les arrondis
+  // OSS Total
+  const ossTotal = transactions
+    .filter(t => {
+      const transactionType = (t['TRANSACTION_TYPE'] || '').toUpperCase().trim();
+      const scheme = (t['TAX_REPORTING_SCHEME'] || '').toUpperCase().trim();
+      return ['SALES', 'REFUND'].includes(transactionType) && scheme === 'UNION-OSS';
+    })
+    .reduce((sum, t) => sum + (t['AMOUNT_SIGNED'] || 0), 0);
+  
+  // REGULAR Total  
+  const regularTotal = transactions
+    .filter(t => {
+      const transactionType = (t['TRANSACTION_TYPE'] || '').toUpperCase().trim();
+      const scheme = (t['TAX_REPORTING_SCHEME'] || '').toUpperCase().trim();
+      return ['SALES', 'REFUND'].includes(transactionType) && scheme === 'REGULAR';
+    })
+    .reduce((sum, t) => sum + (t['AMOUNT_SIGNED'] || 0), 0);
+  
+  // Totaux des composants
+  const b2cTotal = breakdown.reduce((sum, item) => sum + item.domesticB2C, 0);
+  const b2bTotal = breakdown.reduce((sum, item) => sum + item.domesticB2B, 0);
+  const intracomTotal = breakdown.reduce((sum, item) => sum + item.intracommunautaire, 0);
+  
+  // Calculs de différence
+  const diffGrandTotalVsSum = grandTotal - (ossTotal + regularTotal);
+  const diffRegularVsComponents = regularTotal - (b2cTotal + b2bTotal + intracomTotal);
+  
+  const isValid = Math.abs(diffGrandTotalVsSum) < 0.01 && Math.abs(diffRegularVsComponents) < 0.01;
   
   return {
-    totalFromRules,
-    totalFromCSV,
-    difference,
-    isValid,
-    details: {
-      ossTotal,
-      domesticB2CTotal,
-      domesticB2BTotal,
-      intracommunautaireTotal
-    }
+    grandTotal,
+    ossTotal,
+    regularTotal,
+    b2cTotal,
+    b2bTotal,
+    intracomTotal,
+    diffGrandTotalVsSum,
+    diffRegularVsComponents,
+    isValid
   };
 }
 
 /**
- * Statistiques sur l'application des règles
+ * Sanity checks par pays selon spécifications YAML
+ */
+function performCountrySanityCheck(transactions: AmazonVATTransaction[], breakdown: VATRuleData[]): SanityCheckByCountry[] {
+  const countryChecks: SanityCheckByCountry[] = [];
+  
+  // Obtenir tous les pays SALE_DEPART_COUNTRY
+  const countries = new Set<string>();
+  transactions.forEach(t => {
+    const country = normalizeCountryCode(t['SALE_DEPART_COUNTRY'] || '');
+    if (country) countries.add(country);
+  });
+  
+  countries.forEach(country => {
+    // REGULAR total pour ce pays (toutes transactions REGULAR avec SALE_DEPART_COUNTRY = country)
+    const regularTotal = transactions
+      .filter(t => {
+        const transactionType = (t['TRANSACTION_TYPE'] || '').toUpperCase().trim();
+        const scheme = (t['TAX_REPORTING_SCHEME'] || '').toUpperCase().trim();
+        const departCountry = normalizeCountryCode(t['SALE_DEPART_COUNTRY'] || '');
+        return ['SALES', 'REFUND'].includes(transactionType) && 
+               scheme === 'REGULAR' && 
+               departCountry === country;
+      })
+      .reduce((sum, t) => sum + (t['AMOUNT_SIGNED'] || 0), 0);
+    
+    // Composants pour ce pays depuis breakdown
+    const countryData = breakdown.find(b => b.country === country);
+    const b2cTotal = countryData?.domesticB2C || 0;
+    const b2bTotal = countryData?.domesticB2B || 0;
+    const intracomTotal = countryData?.intracommunautaire || 0;
+    
+    const difference = regularTotal - (b2cTotal + b2bTotal + intracomTotal);
+    const isValid = Math.abs(difference) < 0.01;
+    
+    if (regularTotal !== 0 || b2cTotal !== 0 || b2bTotal !== 0 || intracomTotal !== 0) {
+      countryChecks.push({
+        country,
+        regularTotal,
+        b2cTotal,
+        b2bTotal,
+        intracomTotal,
+        difference,
+        isValid
+      });
+    }
+  });
+  
+  return countryChecks.sort((a, b) => a.country.localeCompare(b.country));
+}
+
+/**
+ * Statistiques sur l'application des règles selon spécifications YAML
  */
 function calculateRulesStatistics(transactions: AmazonVATTransaction[]) {
   let ossRules = 0;
   let domesticB2CRules = 0;
   let domesticB2BRules = 0;
   let intracommunautaireRules = 0;
+  let totalProcessed = 0;
   
   transactions.forEach(transaction => {
     const transactionType = (transaction['TRANSACTION_TYPE'] || '').toUpperCase().trim();
@@ -314,6 +399,8 @@ function calculateRulesStatistics(transactions: AmazonVATTransaction[]) {
     
     const amountSigned = transaction['AMOUNT_SIGNED'] || 0;
     if (amountSigned === 0) return;
+    
+    totalProcessed++;
     
     const ruleResult = applyVentilationRule(transaction);
     if (ruleResult) {
@@ -338,7 +425,8 @@ function calculateRulesStatistics(transactions: AmazonVATTransaction[]) {
     ossRules,
     domesticB2CRules,
     domesticB2BRules,
-    intracommunautaireRules
+    intracommunautaireRules,
+    totalProcessed
   };
 }
 
