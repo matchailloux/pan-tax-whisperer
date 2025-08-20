@@ -1,11 +1,15 @@
 import { useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Upload, FileSpreadsheet, CheckCircle, AlertCircle } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Upload, FileSpreadsheet, CheckCircle, AlertCircle, AlertTriangle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { RulesConfig, VATRule } from "./RulesConfig";
 import { VATBreakdown, VATBreakdownData } from "./VATBreakdown";
 import { parseCSV, applyVATRules } from "@/utils/vatProcessor";
+import { processAmazonVATReport } from "@/utils/amazonVATEngine";
 
 const UploadSection = () => {
   const [dragActive, setDragActive] = useState(false);
@@ -13,6 +17,7 @@ const UploadSection = () => {
   const [rules, setRules] = useState<VATRule[]>([]);
   const [vatBreakdown, setVatBreakdown] = useState<VATBreakdownData[] | null>(null);
   const [showRulesConfig, setShowRulesConfig] = useState(false);
+  const [useAutoEngine, setUseAutoEngine] = useState(true);
   const { toast } = useToast();
 
   const handleDrag = (e: React.DragEvent) => {
@@ -61,7 +66,9 @@ const UploadSection = () => {
   };
 
   const analyzeFile = async () => {
-    if (!uploadedFile || rules.length === 0) {
+    if (!uploadedFile) return;
+    
+    if (!useAutoEngine && rules.length === 0) {
       toast({
         title: "Impossible d'analyser",
         description: "Veuillez configurer au moins une règle de ventilation.",
@@ -72,13 +79,19 @@ const UploadSection = () => {
 
     try {
       const content = await uploadedFile.text();
-      const rows = parseCSV(content);
-      const breakdown = applyVATRules(rows, rules);
+      let breakdown: VATBreakdownData[];
+      
+      if (useAutoEngine) {
+        breakdown = processAmazonVATReport(content);
+      } else {
+        const rows = parseCSV(content);
+        breakdown = applyVATRules(rows, rules);
+      }
       
       setVatBreakdown(breakdown);
       toast({
         title: "Analyse terminée",
-        description: `${breakdown.length} pays analysés avec ${rows.length} transactions.`,
+        description: `${breakdown.length} pays analysés ${useAutoEngine ? '(moteur automatique)' : '(règles manuelles)'}.`,
       });
     } catch (error) {
       toast({
@@ -99,24 +112,49 @@ const UploadSection = () => {
               <span className="bg-gradient-hero bg-clip-text text-transparent"> Amazon TVA</span>
             </h2>
             <p className="text-xl text-muted-foreground">
-              Importez votre fichier CSV et laissez notre IA faire le travail
+              Traitement automatique des rapports Amazon VAT avec notre moteur intelligent
             </p>
-          </div>
-
-          {/* Rules Configuration */}
-          <div className="mb-8">
-            <Button 
-              onClick={() => setShowRulesConfig(!showRulesConfig)}
-              variant="outline" 
-              className="mb-4"
-            >
-              {showRulesConfig ? 'Masquer' : 'Configurer'} les règles de ventilation
-            </Button>
             
-            {showRulesConfig && (
-              <RulesConfig onRulesChange={setRules} />
+            <div className="flex items-center justify-center space-x-4 mt-6">
+              <div className="flex items-center space-x-2">
+                <Switch
+                  id="auto-engine"
+                  checked={useAutoEngine}
+                  onCheckedChange={setUseAutoEngine}
+                />
+                <Label htmlFor="auto-engine" className="text-base">
+                  Moteur automatique Amazon (recommandé)
+                </Label>
+              </div>
+            </div>
+            
+            {!useAutoEngine && (
+              <Alert className="mt-4 max-w-md mx-auto">
+                <AlertTriangle className="h-4 w-4" />
+                <AlertTitle>Mode manuel activé</AlertTitle>
+                <AlertDescription>
+                  Vous devrez configurer les règles de ventilation manuellement.
+                </AlertDescription>
+              </Alert>
             )}
           </div>
+
+          {/* Rules Configuration - Only show in manual mode */}
+          {!useAutoEngine && (
+            <div className="mb-8">
+              <Button 
+                onClick={() => setShowRulesConfig(!showRulesConfig)}
+                variant="outline" 
+                className="mb-4"
+              >
+                {showRulesConfig ? 'Masquer' : 'Configurer'} les règles de ventilation
+              </Button>
+              
+              {showRulesConfig && (
+                <RulesConfig onRulesChange={setRules} />
+              )}
+            </div>
+          )}
 
           <div className="grid lg:grid-cols-2 gap-12 items-start">
             {/* Upload Area */}
@@ -159,9 +197,12 @@ const UploadSection = () => {
                         variant="accent" 
                         size="lg"
                         onClick={analyzeFile}
-                        disabled={rules.length === 0}
+                        disabled={!useAutoEngine && rules.length === 0}
                       >
-                        Analyser le fichier ({rules.length} règle{rules.length > 1 ? 's' : ''})
+                        {useAutoEngine 
+                          ? "Analyser automatiquement"
+                          : `Analyser le fichier (${rules.length} règle${rules.length > 1 ? 's' : ''})`
+                        }
                       </Button>
                     </div>
                   ) : (
