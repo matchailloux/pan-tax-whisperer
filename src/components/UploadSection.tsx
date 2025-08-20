@@ -102,6 +102,15 @@ const UploadSection = () => {
     }
   };
 
+  const resetAnalysis = () => {
+    setUploadedFile(null);
+    setVatBreakdown(null);
+    toast({
+      title: "Nouvelle analyse",
+      description: "Vous pouvez maintenant importer un nouveau fichier.",
+    });
+  };
+
   return (
     <section className="py-24 bg-gradient-subtle">
       <div className="container mx-auto px-4">
@@ -248,6 +257,15 @@ const UploadSection = () => {
             {vatBreakdown && (
               <div className="mb-8 col-span-full">
                 <VATBreakdown data={vatBreakdown} fileName={uploadedFile?.name} />
+                <div className="mt-6 text-center">
+                  <Button 
+                    variant="outline" 
+                    size="lg"
+                    onClick={resetAnalysis}
+                  >
+                    Importer un nouveau fichier
+                  </Button>
+                </div>
               </div>
             )}
 
