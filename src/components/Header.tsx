@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Menu, X } from "lucide-react";
 
@@ -41,8 +42,12 @@ const Header = () => {
 
           {/* Desktop CTA */}
           <div className="hidden md:flex items-center gap-4">
-            <Button variant="ghost">Se connecter</Button>
-            <Button variant="hero">Essai gratuit</Button>
+            <Button variant="ghost" asChild>
+              <Link to="/auth">Se connecter</Link>
+            </Button>
+            <Button variant="hero" asChild>
+              <Link to="/auth">Essai gratuit</Link>
+            </Button>
           </div>
 
           {/* Mobile Menu Button */}
@@ -69,11 +74,11 @@ const Header = () => {
                 </a>
               ))}
               <div className="px-4 pt-4 space-y-2">
-                <Button variant="ghost" className="w-full justify-start">
-                  Se connecter
+                <Button variant="ghost" className="w-full justify-start" asChild>
+                  <Link to="/auth">Se connecter</Link>
                 </Button>
-                <Button variant="hero" className="w-full">
-                  Essai gratuit
+                <Button variant="hero" className="w-full" asChild>
+                  <Link to="/auth">Essai gratuit</Link>
                 </Button>
               </div>
             </nav>
