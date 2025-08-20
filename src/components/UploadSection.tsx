@@ -286,10 +286,7 @@ const UploadSection = () => {
             {newVatData && (
               <div className="mb-8 col-span-full">
                 <NewVATBreakdown 
-                  data={newVatData.breakdown} 
-                  sanityCheckGlobal={newVatData.sanityCheckGlobal}
-                  sanityCheckByCountry={newVatData.sanityCheckByCountry}
-                  rulesApplied={newVatData.rulesApplied}
+                  report={newVatData}
                   fileName={uploadedFile?.name} 
                 />
                 <div className="mt-6 text-center">

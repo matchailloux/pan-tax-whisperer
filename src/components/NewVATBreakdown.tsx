@@ -1,25 +1,18 @@
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { CheckCircle, AlertTriangle, Info } from "lucide-react";
-import { VATRuleData, SanityCheckGlobal, SanityCheckByCountry, DetailedVATReport } from "@/utils/newVATRulesEngine";
+import { CheckCircle, XCircle, AlertTriangle, Info, TrendingUp, Users, Globe, Building, MapPin } from "lucide-react";
+import { DetailedVATReport } from "@/utils/newVATRulesEngine";
 
 interface NewVATBreakdownProps {
-  data: VATRuleData[];
-  sanityCheckGlobal: SanityCheckGlobal;
-  sanityCheckByCountry: SanityCheckByCountry[];
-  rulesApplied: {
-    ossRules: number;
-    domesticB2CRules: number;
-    domesticB2BRules: number;
-    intracommunautaireRules: number;
-    totalProcessed: number;
-  };
+  report: DetailedVATReport;
   fileName?: string;
 }
 
-export function NewVATBreakdown({ data, sanityCheckGlobal, sanityCheckByCountry, rulesApplied, fileName }: NewVATBreakdownProps) {
+export function NewVATBreakdown({ report, fileName }: NewVATBreakdownProps) {
+  const { breakdown, kpiCards, sanityCheckGlobal, sanityCheckByCountry, rulesApplied } = report;
+  
   const formatAmount = (amount: number) => {
     return new Intl.NumberFormat('fr-FR', {
       style: 'currency',
@@ -32,6 +25,16 @@ export function NewVATBreakdown({ data, sanityCheckGlobal, sanityCheckByCountry,
   };
 
   const invalidCountries = sanityCheckByCountry.filter(c => !c.isValid);
+
+  const getKPIIcon = (title: string) => {
+    if (title.includes('Total')) return TrendingUp;
+    if (title.includes('OSS')) return Globe;
+    if (title.includes('B2C')) return Users;
+    if (title.includes('B2B')) return Building;
+    if (title.includes('Intracommunautaire')) return MapPin;
+    if (title.includes('Suisse')) return MapPin;
+    return AlertTriangle;
+  };
 
   return (
     <div className="space-y-6">
@@ -114,55 +117,27 @@ export function NewVATBreakdown({ data, sanityCheckGlobal, sanityCheckByCountry,
         </Card>
       )}
 
-      {/* Tableaux de synthèse par type */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <Card>
-          <CardContent className="p-4 text-center">
-            <p className="text-sm text-muted-foreground">Domestique B2C</p>
-            <p className="text-xl font-bold text-blue-600">
-              {formatAmount(sanityCheckGlobal.b2cTotal)}
-            </p>
-            <p className="text-xs text-muted-foreground">
-              {formatNumber(rulesApplied.domesticB2CRules)} transactions
-            </p>
-          </CardContent>
-        </Card>
-        
-        <Card>
-          <CardContent className="p-4 text-center">
-            <p className="text-sm text-muted-foreground">Domestique B2B</p>
-            <p className="text-xl font-bold text-green-600">
-              {formatAmount(sanityCheckGlobal.b2bTotal)}
-            </p>
-            <p className="text-xs text-muted-foreground">
-              {formatNumber(rulesApplied.domesticB2BRules)} transactions
-            </p>
-          </CardContent>
-        </Card>
-        
-        <Card>
-          <CardContent className="p-4 text-center">
-            <p className="text-sm text-muted-foreground">Intracommunautaire</p>
-            <p className="text-xl font-bold text-orange-600">
-              {formatAmount(sanityCheckGlobal.intracomTotal)}
-            </p>
-            <p className="text-xs text-muted-foreground">
-              {formatNumber(rulesApplied.intracommunautaireRules)} transactions
-            </p>
-          </CardContent>
-        </Card>
-        
-        <Card>
-          <CardContent className="p-4 text-center">
-            <p className="text-sm text-muted-foreground">OSS</p>
-            <p className="text-xl font-bold text-purple-600">
-              {formatAmount(sanityCheckGlobal.ossTotal)}
-            </p>
-            <p className="text-xs text-muted-foreground">
-              {formatNumber(rulesApplied.ossRules)} transactions
-            </p>
-          </CardContent>
-        </Card>
+      {/* KPI Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        {kpiCards.map((kpi, index) => {
+          const Icon = getKPIIcon(kpi.title);
+          const isTotal = kpi.title.includes('Total');
+          
+          return (
+            <Card key={index} className={isTotal ? 'border-primary bg-primary/5' : ''}>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">{kpi.title}</CardTitle>
+                <Icon className={`h-4 w-4 ${isTotal ? 'text-primary' : 'text-muted-foreground'}`} />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{formatAmount(kpi.amount)}</div>
+                <p className="text-xs text-muted-foreground">
+                  {formatNumber(kpi.count)} transactions
+                </p>
+              </CardContent>
+            </Card>
+          );
+        })}
       </div>
 
       {/* Tableau détaillé par pays */}
@@ -187,32 +162,40 @@ export function NewVATBreakdown({ data, sanityCheckGlobal, sanityCheckByCountry,
             <TableHeader>
               <TableRow>
                 <TableHead>Pays</TableHead>
-                <TableHead className="text-right">Domestique B2C</TableHead>
-                <TableHead className="text-right">Domestique B2B</TableHead>
-                <TableHead className="text-right">Intracommunautaire</TableHead>
                 <TableHead className="text-right">OSS</TableHead>
+                <TableHead className="text-right">B2C</TableHead>
+                <TableHead className="text-right">B2B</TableHead>
+                <TableHead className="text-right">Intracom</TableHead>
+                <TableHead className="text-right">Suisse</TableHead>
+                <TableHead className="text-right">Résidu</TableHead>
                 <TableHead className="text-right">Total</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {data.map((row) => (
+              {breakdown.map((row) => (
                 <TableRow key={row.country}>
                   <TableCell className="font-medium">
                     <Badge variant="outline">{row.country}</Badge>
                   </TableCell>
-                  <TableCell className="text-right">
-                    {formatAmount(row.domesticB2C)}
+                  <TableCell className="text-right font-mono">
+                    {row.oss !== 0 ? formatAmount(row.oss) : '-'}
                   </TableCell>
-                  <TableCell className="text-right">
-                    {formatAmount(row.domesticB2B)}
+                  <TableCell className="text-right font-mono">
+                    {row.domesticB2C !== 0 ? formatAmount(row.domesticB2C) : '-'}
                   </TableCell>
-                  <TableCell className="text-right">
-                    {formatAmount(row.intracommunautaire)}
+                  <TableCell className="text-right font-mono">
+                    {row.domesticB2B !== 0 ? formatAmount(row.domesticB2B) : '-'}
                   </TableCell>
-                  <TableCell className="text-right">
-                    {formatAmount(row.oss)}
+                  <TableCell className="text-right font-mono">
+                    {row.intracommunautaire !== 0 ? formatAmount(row.intracommunautaire) : '-'}
                   </TableCell>
-                  <TableCell className="text-right font-medium">
+                  <TableCell className="text-right font-mono">
+                    {row.suisse !== 0 ? formatAmount(row.suisse) : '-'}
+                  </TableCell>
+                  <TableCell className="text-right font-mono">
+                    {row.residuel !== 0 ? formatAmount(row.residuel) : '-'}
+                  </TableCell>
+                  <TableCell className="text-right font-mono font-semibold">
                     {formatAmount(row.total)}
                   </TableCell>
                 </TableRow>
@@ -231,22 +214,30 @@ export function NewVATBreakdown({ data, sanityCheckGlobal, sanityCheckByCountry,
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
-            <div>
-              <p className="text-2xl font-bold text-blue-600">{formatNumber(rulesApplied.domesticB2CRules)}</p>
-              <p className="text-sm text-muted-foreground">Règles B2C</p>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+            <div className="text-center p-4 bg-blue-50 rounded-lg">
+              <div className="text-2xl font-bold text-blue-600">{rulesApplied.ossRules}</div>
+              <div className="text-sm text-blue-600">OSS</div>
             </div>
-            <div>
-              <p className="text-2xl font-bold text-green-600">{formatNumber(rulesApplied.domesticB2BRules)}</p>
-              <p className="text-sm text-muted-foreground">Règles B2B</p>
+            <div className="text-center p-4 bg-green-50 rounded-lg">
+              <div className="text-2xl font-bold text-green-600">{rulesApplied.domesticB2CRules}</div>
+              <div className="text-sm text-green-600">B2C</div>
             </div>
-            <div>
-              <p className="text-2xl font-bold text-orange-600">{formatNumber(rulesApplied.intracommunautaireRules)}</p>
-              <p className="text-sm text-muted-foreground">Règles Intracom</p>
+            <div className="text-center p-4 bg-purple-50 rounded-lg">
+              <div className="text-2xl font-bold text-purple-600">{rulesApplied.domesticB2BRules}</div>
+              <div className="text-sm text-purple-600">B2B</div>
             </div>
-            <div>
-              <p className="text-2xl font-bold text-purple-600">{formatNumber(rulesApplied.ossRules)}</p>
-              <p className="text-sm text-muted-foreground">Règles OSS</p>
+            <div className="text-center p-4 bg-orange-50 rounded-lg">
+              <div className="text-2xl font-bold text-orange-600">{rulesApplied.intracommunautaireRules}</div>
+              <div className="text-sm text-orange-600">Intracommunautaire</div>
+            </div>
+            <div className="text-center p-4 bg-red-50 rounded-lg">
+              <div className="text-2xl font-bold text-red-600">{rulesApplied.suisseRules}</div>
+              <div className="text-sm text-red-600">Suisse</div>
+            </div>
+            <div className="text-center p-4 bg-gray-50 rounded-lg">
+              <div className="text-2xl font-bold text-gray-600">{rulesApplied.residuelRules}</div>
+              <div className="text-sm text-gray-600">Résidu</div>
             </div>
           </div>
         </CardContent>
