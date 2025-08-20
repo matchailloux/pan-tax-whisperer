@@ -3,10 +3,16 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Upload, FileSpreadsheet, CheckCircle, AlertCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { RulesConfig, VATRule } from "./RulesConfig";
+import { VATBreakdown, VATBreakdownData } from "./VATBreakdown";
+import { parseCSV, applyVATRules } from "@/utils/vatProcessor";
 
 const UploadSection = () => {
   const [dragActive, setDragActive] = useState(false);
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
+  const [rules, setRules] = useState<VATRule[]>([]);
+  const [vatBreakdown, setVatBreakdown] = useState<VATBreakdownData[] | null>(null);
+  const [showRulesConfig, setShowRulesConfig] = useState(false);
   const { toast } = useToast();
 
   const handleDrag = (e: React.DragEvent) => {
@@ -40,6 +46,7 @@ const UploadSection = () => {
   const handleFile = (file: File) => {
     if (file.type === "text/csv" || file.name.endsWith('.csv')) {
       setUploadedFile(file);
+      setVatBreakdown(null);
       toast({
         title: "Fichier téléchargé avec succès",
         description: `${file.name} est prêt à être analysé`,
@@ -48,6 +55,35 @@ const UploadSection = () => {
       toast({
         title: "Format non supporté",
         description: "Veuillez télécharger un fichier CSV",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const analyzeFile = async () => {
+    if (!uploadedFile || rules.length === 0) {
+      toast({
+        title: "Impossible d'analyser",
+        description: "Veuillez configurer au moins une règle de ventilation.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      const content = await uploadedFile.text();
+      const rows = parseCSV(content);
+      const breakdown = applyVATRules(rows, rules);
+      
+      setVatBreakdown(breakdown);
+      toast({
+        title: "Analyse terminée",
+        description: `${breakdown.length} pays analysés avec ${rows.length} transactions.`,
+      });
+    } catch (error) {
+      toast({
+        title: "Erreur d'analyse",
+        description: "Impossible de traiter le fichier CSV.",
         variant: "destructive",
       });
     }
@@ -65,6 +101,21 @@ const UploadSection = () => {
             <p className="text-xl text-muted-foreground">
               Importez votre fichier CSV et laissez notre IA faire le travail
             </p>
+          </div>
+
+          {/* Rules Configuration */}
+          <div className="mb-8">
+            <Button 
+              onClick={() => setShowRulesConfig(!showRulesConfig)}
+              variant="outline" 
+              className="mb-4"
+            >
+              {showRulesConfig ? 'Masquer' : 'Configurer'} les règles de ventilation
+            </Button>
+            
+            {showRulesConfig && (
+              <RulesConfig onRulesChange={setRules} />
+            )}
           </div>
 
           <div className="grid lg:grid-cols-2 gap-12 items-start">
@@ -107,14 +158,10 @@ const UploadSection = () => {
                       <Button 
                         variant="accent" 
                         size="lg"
-                        onClick={() => {
-                          toast({
-                            title: "Analyse en cours...",
-                            description: "Votre fichier est en cours de traitement",
-                          });
-                        }}
+                        onClick={analyzeFile}
+                        disabled={rules.length === 0}
                       >
-                        Analyser le fichier
+                        Analyser le fichier ({rules.length} règle{rules.length > 1 ? 's' : ''})
                       </Button>
                     </div>
                   ) : (
@@ -155,6 +202,13 @@ const UploadSection = () => {
                 )}
               </CardContent>
             </Card>
+
+            {/* VAT Breakdown Results */}
+            {vatBreakdown && (
+              <div className="mb-8 col-span-full">
+                <VATBreakdown data={vatBreakdown} fileName={uploadedFile?.name} />
+              </div>
+            )}
 
             {/* Instructions */}
             <div className="space-y-6">
