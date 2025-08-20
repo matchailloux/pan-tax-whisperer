@@ -14,7 +14,155 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      profiles: {
+        Row: {
+          company_name: string | null
+          created_at: string
+          email: string | null
+          first_name: string | null
+          id: string
+          last_name: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          company_name?: string | null
+          created_at?: string
+          email?: string | null
+          first_name?: string | null
+          id?: string
+          last_name?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          company_name?: string | null
+          created_at?: string
+          email?: string | null
+          first_name?: string | null
+          id?: string
+          last_name?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      user_files: {
+        Row: {
+          analysis_status: string | null
+          created_at: string
+          file_name: string
+          file_size: number | null
+          file_type: string | null
+          id: string
+          storage_path: string | null
+          upload_date: string
+          user_id: string
+        }
+        Insert: {
+          analysis_status?: string | null
+          created_at?: string
+          file_name: string
+          file_size?: number | null
+          file_type?: string | null
+          id?: string
+          storage_path?: string | null
+          upload_date?: string
+          user_id: string
+        }
+        Update: {
+          analysis_status?: string | null
+          created_at?: string
+          file_name?: string
+          file_size?: number | null
+          file_type?: string | null
+          id?: string
+          storage_path?: string | null
+          upload_date?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      user_settings: {
+        Row: {
+          created_at: string
+          id: string
+          language: string | null
+          notifications_enabled: boolean | null
+          preferences: Json | null
+          theme: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          language?: string | null
+          notifications_enabled?: boolean | null
+          preferences?: Json | null
+          theme?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          language?: string | null
+          notifications_enabled?: boolean | null
+          preferences?: Json | null
+          theme?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      vat_reports: {
+        Row: {
+          analysis_date: string
+          created_at: string
+          currency: string | null
+          file_id: string | null
+          id: string
+          report_data: Json
+          report_name: string
+          total_amount: number | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          analysis_date?: string
+          created_at?: string
+          currency?: string | null
+          file_id?: string | null
+          id?: string
+          report_data: Json
+          report_name: string
+          total_amount?: number | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          analysis_date?: string
+          created_at?: string
+          currency?: string | null
+          file_id?: string | null
+          id?: string
+          report_data?: Json
+          report_name?: string
+          total_amount?: number | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vat_reports_file_id_fkey"
+            columns: ["file_id"]
+            isOneToOne: false
+            referencedRelation: "user_files"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
