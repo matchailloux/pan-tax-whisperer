@@ -1,18 +1,31 @@
 import React from 'react';
+import { Link } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { FileText, TrendingUp, Activity, Settings, Upload, Clock } from 'lucide-react';
+import { useDashboardStats } from '@/hooks/useDashboardStats';
+import { useVATReports } from '@/hooks/useVATReports';
+import { useUserFiles } from '@/hooks/useUserFiles';
 
 const DashboardHome = () => {
-  const handleNewAnalysis = () => {
-    // Navigate to analysis page
-    window.location.href = '/dashboard/analysis';
-  };
+  const { stats, formatGrowth, formatAmount, formatLastActivity } = useDashboardStats();
+  const { reports } = useVATReports();
+  const { files } = useUserFiles();
 
-  const handleViewReports = () => {
-    // Navigate to reports page
-    window.location.href = '/dashboard/reports';
-  };
+  const recentActivity = [
+    ...files.slice(0, 3).map(file => ({
+      type: 'file',
+      name: file.file_name,
+      date: new Date(file.upload_date),
+      status: file.analysis_status
+    })),
+    ...reports.slice(0, 3).map(report => ({
+      type: 'report',
+      name: report.report_name,
+      date: new Date(report.created_at),
+      amount: report.total_amount
+    }))
+  ].sort((a, b) => b.date.getTime() - a.date.getTime()).slice(0, 5);
 
   return (
     <div className="space-y-6">
@@ -34,9 +47,9 @@ const DashboardHome = () => {
             <FileText className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">0</div>
+            <div className="text-2xl font-bold">{stats.filesProcessed}</div>
             <p className="text-xs text-muted-foreground">
-              +0% par rapport au mois dernier
+              {formatGrowth(stats.filesGrowth)} par rapport au mois dernier
             </p>
           </CardContent>
         </Card>
@@ -49,9 +62,9 @@ const DashboardHome = () => {
             <TrendingUp className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">€0</div>
+            <div className="text-2xl font-bold">{formatAmount(stats.totalVATCollected)}</div>
             <p className="text-xs text-muted-foreground">
-              +0% par rapport au mois dernier
+              {formatGrowth(stats.vatGrowth)} par rapport au mois dernier
             </p>
           </CardContent>
         </Card>
@@ -64,9 +77,9 @@ const DashboardHome = () => {
             <Activity className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">0</div>
+            <div className="text-2xl font-bold">{stats.reportsGenerated}</div>
             <p className="text-xs text-muted-foreground">
-              +0% par rapport au mois dernier
+              {formatGrowth(stats.reportsGrowth)} par rapport au mois dernier
             </p>
           </CardContent>
         </Card>
@@ -79,9 +92,9 @@ const DashboardHome = () => {
             <Settings className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">0</div>
+            <div className="text-2xl font-bold">{stats.analysesThisMonth}</div>
             <p className="text-xs text-muted-foreground">
-              +0% par rapport au mois dernier
+              {formatGrowth(stats.analysesGrowth)} par rapport au mois dernier
             </p>
           </CardContent>
         </Card>
@@ -104,19 +117,23 @@ const DashboardHome = () => {
             <Button 
               className="w-full" 
               size="lg"
-              onClick={handleNewAnalysis}
+              asChild
             >
-              <Upload className="mr-2 h-4 w-4" />
-              Nouvelle analyse TVA
+              <Link to="/dashboard/analysis">
+                <Upload className="mr-2 h-4 w-4" />
+                Nouvelle analyse TVA
+              </Link>
             </Button>
             <Button 
               variant="outline" 
               className="w-full" 
               size="lg"
-              onClick={handleViewReports}
+              asChild
             >
-              <FileText className="mr-2 h-4 w-4" />
-              Voir mes rapports
+              <Link to="/dashboard/reports">
+                <FileText className="mr-2 h-4 w-4" />
+                Voir mes rapports
+              </Link>
             </Button>
           </CardContent>
         </Card>
@@ -132,7 +149,31 @@ const DashboardHome = () => {
               Vos dernières analyses et actions
             </CardDescription>
           </CardHeader>
-          <CardContent>
+        <CardContent>
+          {recentActivity.length > 0 ? (
+            <div className="space-y-4">
+              {recentActivity.map((activity, index) => (
+                <div key={index} className="flex items-center justify-between py-2 border-b last:border-b-0">
+                  <div className="flex items-center gap-3">
+                    {activity.type === 'file' ? (
+                      <FileText className="h-4 w-4 text-muted-foreground" />
+                    ) : (
+                      <Activity className="h-4 w-4 text-muted-foreground" />
+                    )}
+                    <div>
+                      <p className="text-sm font-medium">{activity.name}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {activity.type === 'file' ? 'Fichier importé' : 'Rapport généré'}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    {formatLastActivity(activity.date)}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
             <div className="text-center py-8 text-muted-foreground">
               <Activity className="h-12 w-12 mx-auto mb-4 opacity-50" />
               <p>Aucune activité récente</p>
@@ -140,7 +181,8 @@ const DashboardHome = () => {
                 Commencez par importer votre premier fichier CSV
               </p>
             </div>
-          </CardContent>
+          )}
+        </CardContent>
         </Card>
       </div>
 

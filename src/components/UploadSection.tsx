@@ -1,44 +1,47 @@
-import { useState } from "react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Switch } from "@/components/ui/switch";
-import { Label } from "@/components/ui/label";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Upload, FileSpreadsheet, CheckCircle, AlertCircle, AlertTriangle, Download } from "lucide-react";
+import React, { useState, useRef, DragEvent, ChangeEvent } from 'react';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
+import { Upload, FileText, X, Download } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
+import { useUserFiles } from '@/hooks/useUserFiles';
+import { useVATReports } from '@/hooks/useVATReports';
+import { VATBreakdown } from './VATBreakdown';
+import { NewVATBreakdown } from './NewVATBreakdown';
+import { RulesConfig } from './RulesConfig';
+import { processVATWithNewRules } from '@/utils/newVATRulesEngine';
+import { processAmazonVATReport } from '@/utils/amazonVATEngine';
 import * as XLSX from 'xlsx';
-import { useToast } from "@/hooks/use-toast";
-import { RulesConfig, VATRule } from "./RulesConfig";
-import { VATBreakdown, VATBreakdownData } from "./VATBreakdown";
-import { NewVATBreakdown } from "./NewVATBreakdown";
-import { parseCSV, applyVATRules } from "@/utils/vatProcessor";
-import { processAmazonVATReport } from "@/utils/amazonVATEngine";
-import { processVATWithNewRules } from "@/utils/newVATRulesEngine";
 
 const UploadSection = () => {
-  const [dragActive, setDragActive] = useState(false);
+  const [isDragActive, setIsDragActive] = useState(false);
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
-  const [rules, setRules] = useState<VATRule[]>([]);
-  const [vatBreakdown, setVatBreakdown] = useState<VATBreakdownData[] | null>(null);
+  const [vatBreakdown, setVatBreakdown] = useState<any>(null);
   const [newVatData, setNewVatData] = useState<any>(null);
-  const [showRulesConfig, setShowRulesConfig] = useState(false);
-  const [useAutoEngine, setUseAutoEngine] = useState(true);
-  const [useNewEngine, setUseNewEngine] = useState(true);
+  const [rules, setRules] = useState<any[]>([]);
+  const [useAutomaticEngine, setUseAutomaticEngine] = useState(true);
+  const [currentFileId, setCurrentFileId] = useState<string | null>(null);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
+  const { uploadFile, updateFileStatus } = useUserFiles();
+  const { saveReport } = useVATReports();
 
-  const handleDrag = (e: React.DragEvent) => {
+  const handleDrag = (e: DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
     if (e.type === "dragenter" || e.type === "dragover") {
-      setDragActive(true);
+      setIsDragActive(true);
     } else if (e.type === "dragleave") {
-      setDragActive(false);
+      setIsDragActive(false);
     }
   };
 
-  const handleDrop = (e: React.DragEvent) => {
+  const handleDrop = (e: DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    setDragActive(false);
+    setIsDragActive(false);
 
     const files = e.dataTransfer.files;
     if (files && files[0]) {
@@ -46,66 +49,83 @@ const UploadSection = () => {
     }
   };
 
-  const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileInput = (e: ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (files && files[0]) {
       handleFile(files[0]);
     }
   };
 
-  const handleFile = (file: File) => {
-    if (file.type === "text/csv" || file.name.endsWith('.csv')) {
-      setUploadedFile(file);
-      setVatBreakdown(null);
-      setNewVatData(null);
-      toast({
-        title: "Fichier téléchargé avec succès",
-        description: `${file.name} est prêt à être analysé`,
-      });
-    } else {
+  const handleFile = async (file: File) => {
+    if (!file.type.includes('csv') && !file.name.endsWith('.csv')) {
       toast({
         title: "Format non supporté",
         description: "Veuillez télécharger un fichier CSV",
         variant: "destructive",
       });
-    }
-  };
-
-  const analyzeFile = async () => {
-    if (!uploadedFile) return;
-    
-    if (!useAutoEngine && rules.length === 0) {
-      toast({
-        title: "Impossible d'analyser",
-        description: "Veuillez configurer au moins une règle de ventilation.",
-        variant: "destructive",
-      });
       return;
     }
 
+    setUploadedFile(file);
+    setIsProcessing(true);
+    
+    // Upload file to Supabase Storage
+    const fileId = await uploadFile(file);
+    if (fileId) {
+      setCurrentFileId(fileId);
+      await updateFileStatus(fileId, 'processing');
+    }
+
+    // Process the file
+    await analyzeFile(file, fileId);
+    setIsProcessing(false);
+  };
+
+  const analyzeFile = async (file: File, fileId?: string | null) => {
     try {
-      const content = await uploadedFile.text();
+      const text = await file.text();
       
-      if (useAutoEngine) {
-        const newResult = processVATWithNewRules(content);
-        setNewVatData(newResult);
-        toast({
-          title: "Moteur automatique appliqué",
-          description: `${newResult.breakdown.length} pays analysés - Sanity checks: ${newResult.sanityCheckGlobal.isValid ? 'Valides ✅' : 'Erreurs ❌'}`,
-        });
-      } else {
-        const rows = parseCSV(content);
-        const breakdown = applyVATRules(rows, rules);
-        setVatBreakdown(breakdown);
+      if (useAutomaticEngine) {
+        // Use new engine
+        const report = processVATWithNewRules(text);
+        setNewVatData(report);
+        setVatBreakdown(null);
+
+        // Save report to database
+        if (fileId) {
+          await saveReport(report, `Analyse ${file.name}`, fileId);
+          await updateFileStatus(fileId, 'completed');
+        }
+
         toast({
           title: "Analyse terminée",
-          description: `${breakdown.length} pays analysés (règles manuelles)`,
+          description: `${report.breakdown.length} pays analysés avec succès et sauvegardé.`,
+        });
+      } else {
+        // Use legacy engine
+        const breakdown = processAmazonVATReport(text);
+        setVatBreakdown(breakdown);
+        setNewVatData(null);
+
+        // Save report to database
+        if (fileId) {
+          await saveReport(breakdown, `Analyse ${file.name}`, fileId);
+          await updateFileStatus(fileId, 'completed');
+        }
+
+        toast({
+          title: "Analyse terminée",
+          description: "Votre fichier a été analysé avec succès et sauvegardé.",
         });
       }
     } catch (error) {
+      console.error('Erreur lors de l\'analyse du fichier:', error);
+      if (fileId) {
+        await updateFileStatus(fileId, 'error');
+      }
       toast({
         title: "Erreur d'analyse",
-        description: "Impossible de traiter le fichier CSV.",
+        description: "Une erreur est survenue lors de l'analyse du fichier.",
         variant: "destructive",
       });
     }
@@ -115,10 +135,11 @@ const UploadSection = () => {
     setUploadedFile(null);
     setVatBreakdown(null);
     setNewVatData(null);
-    toast({
-      title: "Nouvelle analyse",
-      description: "Vous pouvez maintenant importer un nouveau fichier.",
-    });
+    setCurrentFileId(null);
+    setIsProcessing(false);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
   };
 
   const exportToExcel = () => {
@@ -149,30 +170,15 @@ const UploadSection = () => {
         const countryWs = XLSX.utils.json_to_sheet(countryData);
         XLSX.utils.book_append_sheet(wb, countryWs, 'Ventilation par pays');
       }
-
-      // Export Sanity Check Global
-      if (newVatData.sanityCheckGlobal && newVatData.sanityCheckGlobal.data) {
-        const sanityData = [{
-          'Grand Total': newVatData.sanityCheckGlobal.data['Grand_Total'] || 0,
-          'OSS Total': newVatData.sanityCheckGlobal.data['OSS_Total'] || 0,
-          'REGULAR Total': newVatData.sanityCheckGlobal.data['REGULAR_Total'] || 0,
-          'Suisse Total': newVatData.sanityCheckGlobal.data['Suisse_Total'] || 0,
-          'B2C Total': newVatData.sanityCheckGlobal.data['B2C_Total'] || 0,
-          'B2B Total': newVatData.sanityCheckGlobal.data['B2B_Total'] || 0,
-          'Intracommunautaire Total': newVatData.sanityCheckGlobal.data['Intracom_Total'] || 0,
-          'Autre Total': newVatData.sanityCheckGlobal.data['Autre_Total'] || 0,
-          'Δ GT − (OSS+REG+Suisse+Autre)': newVatData.sanityCheckGlobal.data['Δ GT − (OSS+REG+Suisse+Autre)'] || 0,
-          'Δ REG − (B2C+B2B+Intra)': newVatData.sanityCheckGlobal.data['Δ REG − (B2C+B2B+Intra)'] || 0
-        }];
-        const sanityWs = XLSX.utils.json_to_sheet(sanityData);
-        XLSX.utils.book_append_sheet(wb, sanityWs, 'Vérifications globales');
-      }
     } else if (vatBreakdown) {
       // Export old format
-      const oldData = vatBreakdown.map((item: any) => ({
+      const oldData = vatBreakdown.pivotView.map((item: any) => ({
         'Pays': item.country,
-        'Montant HT': item.amount,
-        'Transactions': item.transactionCount
+        'Local B2C': item.localB2C || 0,
+        'Local B2B': item.localB2B || 0,
+        'Intracommunautaire': item.intracommunautaire || 0,
+        'OSS': item.oss || 0,
+        'Total': item.total || 0
       }));
       const oldWs = XLSX.utils.json_to_sheet(oldData);
       XLSX.utils.book_append_sheet(wb, oldWs, 'Données');
@@ -188,258 +194,183 @@ const UploadSection = () => {
   };
 
   return (
-    <section className="py-24 bg-gradient-subtle">
-      <div className="container mx-auto px-4">
-        <div className="max-w-4xl mx-auto">
-          <div className="text-center mb-12">
-            <h2 className="text-3xl lg:text-4xl font-bold mb-4">
-              Téléchargez votre rapport
-              <span className="bg-gradient-hero bg-clip-text text-transparent"> Amazon TVA</span>
-            </h2>
-            <p className="text-xl text-muted-foreground">
-              Traitement automatique des rapports Amazon VAT avec notre moteur intelligent
-            </p>
-            
-            <div className="flex items-center justify-center space-x-6 mt-6">
-              <div className="flex items-center space-x-2">
-                <Switch
-                  id="auto-engine"
-                  checked={useAutoEngine}
-                  onCheckedChange={setUseAutoEngine}
-                />
-                <Label htmlFor="auto-engine" className="text-base">
-                  Moteur automatique Amazon (recommandé)
-                </Label>
-              </div>
-              
-              {/* Removed new engine toggle */}
-            </div>
-            
-            {!useAutoEngine && (
-              <Alert className="mt-4 max-w-md mx-auto">
-                <AlertTriangle className="h-4 w-4" />
-                <AlertTitle>Mode manuel activé</AlertTitle>
-                <AlertDescription>
-                  Vous devrez configurer les règles de ventilation manuellement.
-                </AlertDescription>
-              </Alert>
-            )}
-          </div>
-
-          {/* Rules Configuration - Only show in manual mode */}
-          {!useAutoEngine && (
-            <div className="mb-8">
+    <div className="space-y-6">
+      {/* Upload Area */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Import de fichier CSV</CardTitle>
+          <CardDescription>
+            Téléchargez votre rapport TVA Amazon pour l'analyser automatiquement.
+            Les analyses sont automatiquement sauvegardées dans votre tableau de bord.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {!uploadedFile ? (
+            <div
+              className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
+                isDragActive
+                  ? 'border-primary bg-primary/5'
+                  : 'border-muted-foreground/25 hover:border-muted-foreground/50'
+              }`}
+              onDragEnter={handleDrag}
+              onDragLeave={handleDrag}
+              onDragOver={handleDrag}
+              onDrop={handleDrop}
+            >
+              <Upload className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
+              <h3 className="text-lg font-semibold mb-2">
+                Glissez-déposez votre fichier CSV ici
+              </h3>
+              <p className="text-muted-foreground mb-4">
+                ou cliquez pour sélectionner un fichier
+              </p>
               <Button 
-                onClick={() => setShowRulesConfig(!showRulesConfig)}
-                variant="outline" 
-                className="mb-4"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={isProcessing}
               >
-                {showRulesConfig ? 'Masquer' : 'Configurer'} les règles de ventilation
+                {isProcessing ? 'Traitement...' : 'Choisir un fichier'}
               </Button>
-              
-              {showRulesConfig && (
-                <RulesConfig onRulesChange={setRules} />
-              )}
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".csv"
+                onChange={handleFileInput}
+                className="hidden"
+              />
+            </div>
+          ) : (
+            <div className="flex items-center justify-between p-4 border rounded-lg">
+              <div className="flex items-center gap-3">
+                <FileText className="h-8 w-8 text-muted-foreground" />
+                <div>
+                  <h4 className="font-medium">{uploadedFile.name}</h4>
+                  <p className="text-sm text-muted-foreground">
+                    {(uploadedFile.size / 1024).toFixed(1)} KB
+                    {isProcessing && ' - Traitement en cours...'}
+                  </p>
+                </div>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={resetAnalysis}
+                disabled={isProcessing}
+              >
+                <X className="h-4 w-4" />
+              </Button>
             </div>
           )}
+        </CardContent>
+      </Card>
 
-          <div className="grid lg:grid-cols-2 gap-12 items-start">
-            {/* Upload Area */}
-            <Card className="relative">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Upload className="w-5 h-5" />
-                  Importer votre fichier CSV
-                </CardTitle>
-                <CardDescription>
-                  Rapport de transaction TVA depuis Amazon Seller Central
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div
-                  className={`relative border-2 border-dashed rounded-lg p-8 text-center transition-smooth ${
-                    dragActive 
-                      ? "border-primary bg-primary/5" 
-                      : uploadedFile 
-                        ? "border-accent bg-accent/5" 
-                        : "border-border hover:border-primary/50"
-                  }`}
-                  onDragEnter={handleDrag}
-                  onDragLeave={handleDrag}
-                  onDragOver={handleDrag}
-                  onDrop={handleDrop}
-                >
-                  {uploadedFile ? (
-                    <div className="space-y-4">
-                      <div className="w-16 h-16 bg-gradient-accent rounded-full flex items-center justify-center mx-auto">
-                        <CheckCircle className="w-8 h-8 text-accent-foreground" />
-                      </div>
-                      <div>
-                        <p className="font-semibold text-accent">{uploadedFile.name}</p>
-                        <p className="text-sm text-muted-foreground">
-                          {(uploadedFile.size / 1024).toFixed(1)} KB
-                        </p>
-                      </div>
-                      <div className="space-y-3">
-                        <Button 
-                          variant="accent" 
-                          size="lg"
-                          onClick={analyzeFile}
-                          disabled={!useAutoEngine && rules.length === 0}
-                          className="w-full"
-                        >
-                          {useAutoEngine 
-                            ? "Analyser automatiquement"
-                            : `Analyser le fichier (${rules.length} règle${rules.length > 1 ? 's' : ''})`
-                          }
-                        </Button>
-                        
-                        {(newVatData || vatBreakdown) && (
-                          <Button 
-                            variant="outline" 
-                            size="lg"
-                            onClick={resetAnalysis}
-                            className="w-full"
-                          >
-                            Importer un nouveau fichier
-                          </Button>
-                        )}
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="space-y-4">
-                      <div className="w-16 h-16 bg-gradient-primary rounded-full flex items-center justify-center mx-auto">
-                        <FileSpreadsheet className="w-8 h-8 text-primary-foreground" />
-                      </div>
-                      <div>
-                        <p className="text-lg font-semibold mb-2">
-                          Glissez-déposez votre fichier CSV ici
-                        </p>
-                        <p className="text-muted-foreground">
-                          ou cliquez pour sélectionner
-                        </p>
-                      </div>
-                      <input
-                        type="file"
-                        accept=".csv"
-                        onChange={handleFileInput}
-                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                      />
-                      <Button variant="outline" size="lg">
-                        Sélectionner un fichier
-                      </Button>
-                    </div>
-                  )}
-                </div>
-
-                {uploadedFile && (
-                  <div className="mt-4 p-4 bg-accent/10 rounded-lg">
-                    <p className="text-sm text-accent font-medium mb-2">
-                      ✓ Fichier compatible détecté
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      Format Amazon Transaction VAT Report reconnu
-                    </p>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* New VAT Breakdown Results */}
-            {newVatData && (
-              <div className="mb-8 col-span-full">
-                <NewVATBreakdown 
-                  report={newVatData}
-                  fileName={uploadedFile?.name} 
-                />
-                <div className="mt-6 text-center">
-                  <Button 
-                    variant="accent" 
-                    size="lg"
-                    onClick={exportToExcel}
-                    className="gap-2"
-                  >
-                    <Download className="w-4 h-4" />
-                    Exporter les données
-                  </Button>
-                </div>
-              </div>
-            )}
-
-            {/* Old VAT Breakdown Results */}
-            {vatBreakdown && !newVatData && (
-              <div className="mb-8 col-span-full">
-                <VATBreakdown data={vatBreakdown} fileName={uploadedFile?.name} />
-                <div className="mt-6 text-center">
-                  <Button 
-                    variant="accent" 
-                    size="lg"
-                    onClick={exportToExcel}
-                    className="gap-2"
-                  >
-                    <Download className="w-4 h-4" />
-                    Exporter les données
-                  </Button>
-                </div>
-              </div>
-            )}
-
-            {/* Instructions */}
-            <div className="space-y-6">
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-lg">Comment obtenir votre rapport ?</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="flex gap-3">
-                    <div className="w-6 h-6 bg-primary rounded-full flex items-center justify-center text-primary-foreground text-sm font-bold">
-                      1
-                    </div>
-                    <div>
-                      <p className="font-medium">Connectez-vous à Amazon Seller Central</p>
-                      <p className="text-sm text-muted-foreground">Accédez à votre compte vendeur</p>
-                    </div>
-                  </div>
-                  <div className="flex gap-3">
-                    <div className="w-6 h-6 bg-primary rounded-full flex items-center justify-center text-primary-foreground text-sm font-bold">
-                      2
-                    </div>
-                    <div>
-                      <p className="font-medium">Allez dans Rapports → Rapports fiscaux</p>
-                      <p className="text-sm text-muted-foreground">Section "Transaction VAT Report"</p>
-                    </div>
-                  </div>
-                  <div className="flex gap-3">
-                    <div className="w-6 h-6 bg-primary rounded-full flex items-center justify-center text-primary-foreground text-sm font-bold">
-                      3
-                    </div>
-                    <div>
-                      <p className="font-medium">Téléchargez le rapport au format CSV</p>
-                      <p className="text-sm text-muted-foreground">Sélectionnez la période souhaitée</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card className="border-accent/50 bg-accent/5">
-                <CardContent className="pt-6">
-                  <div className="flex gap-3">
-                    <AlertCircle className="w-5 h-5 text-accent flex-shrink-0 mt-0.5" />
-                    <div>
-                      <p className="font-medium text-accent">Données sécurisées</p>
-                      <p className="text-sm text-muted-foreground">
-                        Vos fichiers sont traités en local et supprimés après analyse. 
-                        Aucune donnée sensible n'est stockée sur nos serveurs.
-                      </p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
+      {/* Engine Selection */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Moteur d'analyse</CardTitle>
+          <CardDescription>
+            Choisissez le type d'analyse à effectuer sur vos données
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center space-x-2">
+            <Switch
+              id="automatic-engine"
+              checked={useAutomaticEngine}
+              onCheckedChange={setUseAutomaticEngine}
+            />
+            <Label htmlFor="automatic-engine">
+              Utiliser le moteur automatique (recommandé)
+            </Label>
           </div>
-        </div>
-      </div>
-    </section>
+          <p className="text-sm text-muted-foreground mt-2">
+            {useAutomaticEngine
+              ? "Le moteur automatique applique les dernières règles TVA européennes et effectue des vérifications de cohérence."
+              : "Mode manuel avec configuration de règles personnalisées."}
+          </p>
+        </CardContent>
+      </Card>
+
+      {/* Rules Configuration (only in manual mode) */}
+      {!useAutomaticEngine && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Configuration des règles</CardTitle>
+            <CardDescription>Mode manuel activé</CardDescription>
+          </CardHeader>
+        </Card>
+      )}
+
+      {/* Results */}
+      {newVatData && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle>Résultats d'analyse</CardTitle>
+                <CardDescription>
+                  Analyse automatique avec vérifications de cohérence
+                </CardDescription>
+              </div>
+              <Button onClick={exportToExcel} variant="outline">
+                <Download className="mr-2 h-4 w-4" />
+                Exporter Excel
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="text-center py-8">
+              <p>Résultats d'analyse disponibles</p>
+              <p className="text-sm text-muted-foreground">
+                {newVatData.breakdown?.length || 0} pays analysés
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {vatBreakdown && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle>Résultats d'analyse</CardTitle>
+                <CardDescription>
+                  Analyse avec règles personnalisées
+                </CardDescription>
+              </div>
+              <Button onClick={exportToExcel} variant="outline">
+                <Download className="mr-2 h-4 w-4" />
+                Exporter Excel
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="text-center py-8">
+              <p>Résultats d'analyse disponibles</p>
+              <p className="text-sm text-muted-foreground">
+                Analyse avec moteur legacy
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Instructions */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Comment obtenir votre rapport Amazon</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <ol className="list-decimal list-inside space-y-3 text-sm">
+            <li>Connectez-vous à Amazon Seller Central</li>
+            <li>Allez dans Rapports → Paiements → Rapports d'activité de transaction</li>
+            <li>Générez un rapport "Amazon VAT Transaction Report"</li>
+            <li>Téléchargez le fichier CSV généré</li>
+            <li>Importez-le ici pour analyse automatique</li>
+          </ol>
+        </CardContent>
+      </Card>
+    </div>
   );
 };
 
