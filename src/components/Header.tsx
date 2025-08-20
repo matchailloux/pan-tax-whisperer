@@ -19,7 +19,7 @@ const Header = () => {
           {/* Logo */}
           <div className="flex items-center gap-2">
             <img 
-              src="/lovable-uploads/dba67a2d-9b3f-4bdf-bcc1-d6e1a4f5cce0.png" 
+              src="/lovable-uploads/009eac41-2480-4bc8-8474-44714c138d3f.png" 
               alt="SellCount Logo" 
               className="w-8 h-8"
             />
