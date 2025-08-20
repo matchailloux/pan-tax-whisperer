@@ -8,16 +8,20 @@ import { Upload, FileSpreadsheet, CheckCircle, AlertCircle, AlertTriangle } from
 import { useToast } from "@/hooks/use-toast";
 import { RulesConfig, VATRule } from "./RulesConfig";
 import { VATBreakdown, VATBreakdownData } from "./VATBreakdown";
+import { NewVATBreakdown } from "./NewVATBreakdown";
 import { parseCSV, applyVATRules } from "@/utils/vatProcessor";
 import { processAmazonVATReport } from "@/utils/amazonVATEngine";
+import { processVATWithNewRules } from "@/utils/newVATRulesEngine";
 
 const UploadSection = () => {
   const [dragActive, setDragActive] = useState(false);
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [rules, setRules] = useState<VATRule[]>([]);
   const [vatBreakdown, setVatBreakdown] = useState<VATBreakdownData[] | null>(null);
+  const [newVatData, setNewVatData] = useState<any>(null);
   const [showRulesConfig, setShowRulesConfig] = useState(false);
   const [useAutoEngine, setUseAutoEngine] = useState(true);
+  const [useNewEngine, setUseNewEngine] = useState(true);
   const { toast } = useToast();
 
   const handleDrag = (e: React.DragEvent) => {
@@ -52,6 +56,7 @@ const UploadSection = () => {
     if (file.type === "text/csv" || file.name.endsWith('.csv')) {
       setUploadedFile(file);
       setVatBreakdown(null);
+      setNewVatData(null);
       toast({
         title: "Fichier téléchargé avec succès",
         description: `${file.name} est prêt à être analysé`,
@@ -79,21 +84,30 @@ const UploadSection = () => {
 
     try {
       const content = await uploadedFile.text();
-      let breakdown: VATBreakdownData[];
       
-      if (useAutoEngine) {
+      if (useAutoEngine && useNewEngine) {
+        const newResult = processVATWithNewRules(content);
+        setNewVatData(newResult);
+        toast({
+          title: "Nouveau moteur de règles appliqué",
+          description: `${newResult.breakdown.length} pays analysés - Vérification: ${newResult.verification.isValid ? 'Valide ✅' : 'Erreur ❌'}`,
+        });
+      } else if (useAutoEngine && !useNewEngine) {
         const reportData = processAmazonVATReport(content);
-        breakdown = reportData.breakdown;
+        setVatBreakdown(reportData.breakdown);
+        toast({
+          title: "Ancien moteur appliqué",
+          description: `${reportData.breakdown.length} pays analysés (ancien moteur)`,
+        });
       } else {
         const rows = parseCSV(content);
-        breakdown = applyVATRules(rows, rules);
+        const breakdown = applyVATRules(rows, rules);
+        setVatBreakdown(breakdown);
+        toast({
+          title: "Analyse terminée",
+          description: `${breakdown.length} pays analysés (règles manuelles)`,
+        });
       }
-      
-      setVatBreakdown(breakdown);
-      toast({
-        title: "Analyse terminée",
-        description: `${breakdown.length} pays analysés ${useAutoEngine ? '(moteur automatique)' : '(règles manuelles)'}.`,
-      });
     } catch (error) {
       toast({
         title: "Erreur d'analyse",
@@ -106,6 +120,7 @@ const UploadSection = () => {
   const resetAnalysis = () => {
     setUploadedFile(null);
     setVatBreakdown(null);
+    setNewVatData(null);
     toast({
       title: "Nouvelle analyse",
       description: "Vous pouvez maintenant importer un nouveau fichier.",
@@ -125,7 +140,7 @@ const UploadSection = () => {
               Traitement automatique des rapports Amazon VAT avec notre moteur intelligent
             </p>
             
-            <div className="flex items-center justify-center space-x-4 mt-6">
+            <div className="flex items-center justify-center space-x-6 mt-6">
               <div className="flex items-center space-x-2">
                 <Switch
                   id="auto-engine"
@@ -136,6 +151,19 @@ const UploadSection = () => {
                   Moteur automatique Amazon (recommandé)
                 </Label>
               </div>
+              
+              {useAutoEngine && (
+                <div className="flex items-center space-x-2">
+                  <Switch
+                    id="new-engine"
+                    checked={useNewEngine}
+                    onCheckedChange={setUseNewEngine}
+                  />
+                  <Label htmlFor="new-engine" className="text-base">
+                    Nouveau moteur YAML (avec vérifications)
+                  </Label>
+                </div>
+              )}
             </div>
             
             {!useAutoEngine && (
@@ -254,8 +282,29 @@ const UploadSection = () => {
               </CardContent>
             </Card>
 
-            {/* VAT Breakdown Results */}
-            {vatBreakdown && (
+            {/* New VAT Breakdown Results */}
+            {newVatData && (
+              <div className="mb-8 col-span-full">
+                <NewVATBreakdown 
+                  data={newVatData.breakdown} 
+                  verification={newVatData.verification}
+                  rulesApplied={newVatData.rulesApplied}
+                  fileName={uploadedFile?.name} 
+                />
+                <div className="mt-6 text-center">
+                  <Button 
+                    variant="outline" 
+                    size="lg"
+                    onClick={resetAnalysis}
+                  >
+                    Importer un nouveau fichier
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {/* Old VAT Breakdown Results */}
+            {vatBreakdown && !newVatData && (
               <div className="mb-8 col-span-full">
                 <VATBreakdown data={vatBreakdown} fileName={uploadedFile?.name} />
                 <div className="mt-6 text-center">
