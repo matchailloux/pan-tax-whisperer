@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
+import { Progress } from '@/components/ui/progress';
 import { Upload, FileText, X, Download } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useUserFiles } from '@/hooks/useUserFiles';
@@ -23,6 +24,7 @@ const UploadSection = () => {
   const [useAutomaticEngine, setUseAutomaticEngine] = useState(true);
   const [currentFileId, setCurrentFileId] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [processingProgress, setProcessingProgress] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
   const { uploadFile, updateFileStatus } = useUserFiles();
@@ -68,17 +70,24 @@ const UploadSection = () => {
 
     setUploadedFile(file);
     setIsProcessing(true);
+    setProcessingProgress(0);
+    
+    // Simulate progress for upload
+    setProcessingProgress(20);
     
     // Upload file to Supabase Storage
     const fileId = await uploadFile(file);
     if (fileId) {
       setCurrentFileId(fileId);
+      setProcessingProgress(40);
       await updateFileStatus(fileId, 'processing');
     }
 
+    setProcessingProgress(60);
     // Process the file
     await analyzeFile(file, fileId);
-    setIsProcessing(false);
+    setProcessingProgress(100);
+    setTimeout(() => setIsProcessing(false), 500);
   };
 
   const analyzeFile = async (file: File, fileId?: string | null) => {
@@ -137,6 +146,7 @@ const UploadSection = () => {
     setNewVatData(null);
     setCurrentFileId(null);
     setIsProcessing(false);
+    setProcessingProgress(0);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
@@ -248,6 +258,15 @@ const UploadSection = () => {
                     {(uploadedFile.size / 1024).toFixed(1)} KB
                     {isProcessing && ' - Traitement en cours...'}
                   </p>
+                  {isProcessing && (
+                    <div className="mt-2 space-y-1">
+                      <div className="flex justify-between text-xs text-muted-foreground">
+                        <span>Progression</span>
+                        <span>{processingProgress}%</span>
+                      </div>
+                      <Progress value={processingProgress} className="w-full" />
+                    </div>
+                  )}
                 </div>
               </div>
               <Button
@@ -318,12 +337,7 @@ const UploadSection = () => {
             </div>
           </CardHeader>
           <CardContent>
-            <div className="text-center py-8">
-              <p>Résultats d'analyse disponibles</p>
-              <p className="text-sm text-muted-foreground">
-                {newVatData.breakdown?.length || 0} pays analysés
-              </p>
-            </div>
+            <NewVATBreakdown report={newVatData} fileName={uploadedFile?.name} />
           </CardContent>
         </Card>
       )}
@@ -345,12 +359,7 @@ const UploadSection = () => {
             </div>
           </CardHeader>
           <CardContent>
-            <div className="text-center py-8">
-              <p>Résultats d'analyse disponibles</p>
-              <p className="text-sm text-muted-foreground">
-                Analyse avec moteur legacy
-              </p>
-            </div>
+            <VATBreakdown data={vatBreakdown?.pivotView || []} fileName={uploadedFile?.name} />
           </CardContent>
         </Card>
       )}
