@@ -2,24 +2,22 @@ import { VATBreakdownData } from "@/components/VATBreakdown";
 import { CSVRow } from "./vatProcessor";
 
 export interface AmazonVATRow extends CSVRow {
-  // Colonnes typiques des rapports Amazon VAT
-  'Transaction Date'?: string;
-  'Order ID'?: string;
-  'SKU'?: string;
+  // Colonnes Amazon VAT selon la spécification utilisateur
+  'TRANSACTION_TYPE'?: string;
+  'TOTAL_ACTIVITY_VALUE_AMT_VAT_EXCL'?: string;
+  'TAX_REPORTING_SCHEME'?: string;
+  'SALE_ARRIVAL_COUNTRY'?: string;
+  'SALE_DEPART_COUNTRY'?: string;
+  'BUYER_VAT_NUMBER_COUNTRY'?: string;
+  'BUYER_VAT_NUMBER'?: string;
+  
+  // Autres colonnes potentiellement utiles
+  'ACTIVITY_PERIOD'?: string;
+  'SALES_CHANNEL'?: string;
+  'MARKETPLACE'?: string;
+  'SELLER_SKU'?: string;
   'ASIN'?: string;
-  'Activity Type'?: string;
-  'Ship From Country'?: string;
-  'Ship To Country'?: string;
-  'Fulfillment Center'?: string;
-  'Tax Collection Model'?: string;
-  'VAT Number'?: string;
-  'Customer Type'?: string;
-  'Principal Amount'?: string;
-  'VAT Amount'?: string;
-  'Total Amount'?: string;
-  'Currency'?: string;
-  'Invoice Number'?: string;
-  'Marketplace'?: string;
+  'TRANSACTION_CURRENCY_CODE'?: string;
 }
 
 const EU_COUNTRIES = [
@@ -45,6 +43,10 @@ export function processAmazonVATReport(csvContent: string): VATBreakdownData[] {
   const countryBreakdown: { [country: string]: VATBreakdownData } = {};
 
   rows.forEach(row => {
+    // Filtrer uniquement les SALES et REFUND
+    const transactionType = row['TRANSACTION_TYPE'] || '';
+    if (!['SALES', 'REFUND'].includes(transactionType)) return;
+
     const vatAmount = extractAmazonVATAmount(row);
     if (vatAmount === 0) return;
 
@@ -134,18 +136,12 @@ function parseCSVLine(line: string): string[] {
 }
 
 function extractAmazonVATAmount(row: AmazonVATRow): number {
-  // Colonnes prioritaires pour le montant de TVA Amazon
-  const vatColumns = [
-    'VAT Amount', 'Tax Amount', 'Total Tax', 'VAT', 'Tax'
-  ];
-
-  for (const column of vatColumns) {
-    const value = row[column];
-    if (value) {
-      const amount = parseFloat(value.replace(/[^\d.-]/g, ''));
-      if (!isNaN(amount)) {
-        return Math.abs(amount);
-      }
+  // Utiliser la colonne spécifiée par l'utilisateur
+  const value = row['TOTAL_ACTIVITY_VALUE_AMT_VAT_EXCL'];
+  if (value) {
+    const amount = parseFloat(value.replace(/[^\d.-]/g, ''));
+    if (!isNaN(amount)) {
+      return Math.abs(amount);
     }
   }
 
@@ -158,49 +154,40 @@ interface TransactionAnalysis {
 }
 
 function analyzeTransaction(row: AmazonVATRow): TransactionAnalysis | null {
-  const shipToCountry = getCountryCode(row['Ship To Country'] || '');
-  const shipFromCountry = getCountryCode(row['Ship From Country'] || '');
-  const marketplace = getMarketplaceCountry(row['Marketplace'] || '');
-  const taxCollectionModel = row['Tax Collection Model'] || '';
-  const vatNumber = row['VAT Number'] || '';
-  const customerType = row['Customer Type'] || '';
-  const activityType = row['Activity Type'] || '';
+  const taxReportingScheme = row['TAX_REPORTING_SCHEME'] || '';
+  const saleArrivalCountry = getCountryCode(row['SALE_ARRIVAL_COUNTRY'] || '');
+  const saleDepartCountry = getCountryCode(row['SALE_DEPART_COUNTRY'] || '');
+  const buyerVatNumberCountry = getCountryCode(row['BUYER_VAT_NUMBER_COUNTRY'] || '');
+  const buyerVatNumber = row['BUYER_VAT_NUMBER'] || '';
 
-  if (!shipToCountry) return null;
-
-  // Déterminer le pays de destination
-  const destinationCountry = shipToCountry;
-
-  // Déterminer si B2B ou B2C
-  const isB2B = vatNumber.length > 0 || 
-                customerType.toLowerCase().includes('business') ||
-                customerType.toLowerCase().includes('b2b');
-
-  // Logique de ventilation basée sur les règles Amazon PAN-EU
-  if (taxCollectionModel.includes('OSS') || taxCollectionModel.includes('One Stop Shop')) {
-    return { country: destinationCountry, vatType: 'OSS' };
-  }
-
-  // Si le pays de destination est différent du pays d'expédition ET tous deux dans l'UE
-  if (shipFromCountry && 
-      shipToCountry !== shipFromCountry && 
-      EU_COUNTRIES.includes(shipFromCountry) && 
-      EU_COUNTRIES.includes(shipToCountry)) {
-    
-    if (isB2B) {
-      return { country: destinationCountry, vatType: 'INTRACOMMUNAUTAIRE' };
-    } else {
-      // B2C intracommunautaire = OSS dans la plupart des cas
-      return { country: destinationCountry, vatType: 'OSS' };
+  // Règle 1: Ventes OSS
+  if (taxReportingScheme === 'UNION-OSS') {
+    // Pour l'OSS, le pays est le pays d'arrivée
+    if (saleArrivalCountry) {
+      return { country: saleArrivalCountry, vatType: 'OSS' };
     }
   }
 
-  // Vente locale (même pays d'expédition et de destination)
-  if (isB2B) {
-    return { country: destinationCountry, vatType: 'LOCAL_B2B' };
-  } else {
-    return { country: destinationCountry, vatType: 'LOCAL_B2C' };
+  // Règle 2: Ventes REGULAR (domestique B2C, domestique B2B, intracommunautaire)
+  if (taxReportingScheme === 'REGULAR' && saleDepartCountry) {
+    
+    // Ventes domestiques B2C: BUYER_VAT_NUMBER_COUNTRY est vide
+    if (!buyerVatNumberCountry || buyerVatNumberCountry === '' || buyerVatNumber.trim() === '') {
+      return { country: saleDepartCountry, vatType: 'LOCAL_B2C' };
+    }
+    
+    // Ventes domestiques B2B: SALE_DEPART_COUNTRY = BUYER_VAT_NUMBER_COUNTRY
+    if (buyerVatNumberCountry === saleDepartCountry) {
+      return { country: saleDepartCountry, vatType: 'LOCAL_B2B' };
+    }
+    
+    // Ventes intracommunautaires: SALE_DEPART_COUNTRY ≠ BUYER_VAT_NUMBER_COUNTRY
+    if (buyerVatNumberCountry && buyerVatNumberCountry !== saleDepartCountry) {
+      return { country: saleDepartCountry, vatType: 'INTRACOMMUNAUTAIRE' };
+    }
   }
+
+  return null;
 }
 
 function getCountryCode(countryString: string): string | null {
