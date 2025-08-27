@@ -519,7 +519,16 @@ function parseAmazonCSV(csvContent: string): any[] {
 
   // Gérer les fichiers avec BOM UTF-8
   const firstLine = lines[0].replace(/^\uFEFF/, '');
-  const headers = parseCSVLine(firstLine);
+  const rawHeaders = parseCSVLine(firstLine);
+  const normalizeHeader = (h: string) =>
+    h
+      .replace(/^\uFEFF/, '')
+      .trim()
+      .toUpperCase()
+      .replace(/[^A-Z0-9]+/g, '_')
+      .replace(/__+/g, '_')
+      .replace(/^_|_$/g, '');
+  const headers = rawHeaders.map(normalizeHeader);
   const transactions: any[] = [];
 
   for (let i = 1; i < lines.length; i++) {
@@ -527,7 +536,8 @@ function parseAmazonCSV(csvContent: string): any[] {
     const transaction: any = {};
     
     headers.forEach((header, index) => {
-      transaction[header] = values[index] || '';
+      const value = values[index] ?? '';
+      transaction[header] = typeof value === 'string' ? value.trim() : value;
     });
     
     transactions.push(transaction);

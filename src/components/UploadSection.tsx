@@ -97,19 +97,36 @@ const UploadSection = () => {
       if (useAutomaticEngine) {
         // Use new engine
         const report = processVATWithNewRules(text);
-        setNewVatData(report);
-        setVatBreakdown(null);
 
-        // Save report to database
-        if (fileId) {
-          await saveReport(report, `Analyse ${file.name}`, fileId);
-          await updateFileStatus(fileId, 'completed');
+        if (Array.isArray(report.breakdown) && report.breakdown.length > 0) {
+          setNewVatData(report);
+          setVatBreakdown(null);
+
+          if (fileId) {
+            await saveReport(report, `Analyse ${file.name}`, fileId);
+            await updateFileStatus(fileId, 'completed');
+          }
+
+          toast({
+            title: "Analyse terminée",
+            description: `${report.breakdown.length} pays analysés avec succès et sauvegardé.`,
+          });
+        } else {
+          // Fallback automatique vers le moteur legacy si rien n'est détecté
+          const breakdown = processAmazonVATReport(text);
+          setVatBreakdown(breakdown);
+          setNewVatData(null);
+
+          if (fileId) {
+            await saveReport(breakdown, `Analyse ${file.name} (fallback)`, fileId);
+            await updateFileStatus(fileId, 'completed');
+          }
+
+          toast({
+            title: "Analyse terminée (fallback)",
+            description: "Le moteur automatique n'a rien détecté, bascule vers le moteur legacy effectuée.",
+          });
         }
-
-        toast({
-          title: "Analyse terminée",
-          description: `${report.breakdown.length} pays analysés avec succès et sauvegardé.`,
-        });
       } else {
         // Use legacy engine
         const breakdown = processAmazonVATReport(text);
