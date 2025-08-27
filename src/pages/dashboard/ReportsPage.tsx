@@ -111,8 +111,12 @@ const ReportsPage = () => {
       if (report.report_data?.breakdown) {
         report.report_data.breakdown.forEach((item: any) => {
           const country = item.country || 'Inconnu';
-          const total = item.OSS_total + item.B2C_total + item.B2B_total + item.Intracom_total + item.Suisse_total || 0;
-          countryMap.set(country, (countryMap.get(country) || 0) + total);
+          const total =
+            typeof item.total === 'number'
+              ? item.total
+              : ((item.OSS_total ?? 0) + (item.B2C_total ?? 0) + (item.B2B_total ?? 0) + (item.Intracom_total ?? 0) + (item.Suisse_total ?? 0)) ||
+                ((item.oss ?? 0) + ((item.domesticB2C ?? item.localB2C) ?? 0) + ((item.domesticB2B ?? item.localB2B) ?? 0) + (item.intracommunautaire ?? 0) + (item.suisse ?? 0) + (item.residuel ?? 0));
+          countryMap.set(country, (countryMap.get(country) || 0) + (isNaN(total) ? 0 : total));
         });
       }
     });

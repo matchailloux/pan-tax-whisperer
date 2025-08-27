@@ -61,11 +61,26 @@ export const useVATReports = () => {
     if (!user) return null;
 
     try {
-      // Calculate total amount from report data
+      // Calculate total amount from report data (support both engines)
       let totalAmount = 0;
-      if (reportData.pivotView) {
+      if (Array.isArray(reportData?.pivotView)) {
         totalAmount = reportData.pivotView.reduce(
           (sum: number, item: any) => sum + (item.total || 0),
+          0
+        );
+      } else if (Array.isArray(reportData?.breakdown)) {
+        totalAmount = reportData.breakdown.reduce(
+          (sum: number, item: any) => {
+            if (typeof item.total === 'number') return sum + item.total;
+            const v =
+              (item.oss || 0) +
+              (item.domesticB2C || item.localB2C || 0) +
+              (item.domesticB2B || item.localB2B || 0) +
+              (item.intracommunautaire || 0) +
+              (item.suisse || 0) +
+              (item.residuel || 0);
+            return sum + v;
+          },
           0
         );
       }

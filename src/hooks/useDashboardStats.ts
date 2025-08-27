@@ -58,7 +58,7 @@ export const useDashboardStats = () => {
       analysesGrowth: reportsStats.reportsGrowth,
       lastActivity
     });
-  }, [files, reports, getReportsStats]);
+  }, [files, reports]);
 
   const formatGrowth = (growth: number) => {
     if (growth === 0) return "+0%";

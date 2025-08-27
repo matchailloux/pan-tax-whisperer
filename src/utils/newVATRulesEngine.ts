@@ -134,13 +134,13 @@ export function processVATWithNewRules(csvContent: string): DetailedVATReport {
 function preprocessTransactions(rawTransactions: any[]): ProcessedVATTransaction[] {
   return rawTransactions
     .filter(transaction => {
-      // Étape 2: Ne garder que SALE/REFUND
+      // Étape 2: Ne garder que SALE/SALES/REFUND
       const txType = (transaction['TRANSACTION_TYPE'] || '').toUpperCase().trim();
-      return ['SALE', 'REFUND'].includes(txType);
+      return ['SALE', 'SALES', 'REFUND'].includes(txType);
     })
     .map(transaction => {
       const processed: ProcessedVATTransaction = {};
-      
+
       // Étape 3: Renommer les colonnes pour simplifier
       processed.TX_TYPE = (transaction['TRANSACTION_TYPE'] || '').trim().toUpperCase();
       processed.SCHEME = (transaction['TAX_REPORTING_SCHEME'] || '').trim();
