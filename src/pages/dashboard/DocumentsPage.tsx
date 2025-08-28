@@ -15,7 +15,10 @@ import {
   Filter,
   SortAsc,
   SortDesc,
-  RefreshCw
+  RefreshCw,
+  CheckCircle,
+  HardDrive,
+  Clock
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -176,34 +179,53 @@ const DocumentsPage = () => {
 
       {/* Statistics Cards */}
       <div className="grid gap-4 md:grid-cols-4">
-        <Card>
-          <CardContent className="pt-6">
+        <Card className="border-l-4 border-l-accent bg-gradient-to-r from-accent/5 to-transparent">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total fichiers</CardTitle>
+            <FileText className="h-4 w-4 text-accent" />
+          </CardHeader>
+          <CardContent>
             <div className="text-2xl font-bold">{files.length}</div>
-            <p className="text-xs text-muted-foreground">Total fichiers</p>
+            <p className="text-xs text-muted-foreground">Fichiers importés</p>
           </CardContent>
         </Card>
-        <Card>
-          <CardContent className="pt-6">
+        
+        <Card className="border-l-4 border-l-success bg-gradient-to-r from-success/5 to-transparent">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Analyses terminées</CardTitle>
+            <CheckCircle className="h-4 w-4 text-success" />
+          </CardHeader>
+          <CardContent>
             <div className="text-2xl font-bold">
               {files.filter(f => f.analysis_status === 'completed').length}
             </div>
-            <p className="text-xs text-muted-foreground">Analyses terminées</p>
+            <p className="text-xs text-muted-foreground">Traitements réussis</p>
           </CardContent>
         </Card>
-        <Card>
-          <CardContent className="pt-6">
+        
+        <Card className="border-l-4 border-l-warning bg-gradient-to-r from-warning/5 to-transparent">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Espace utilisé</CardTitle>
+            <HardDrive className="h-4 w-4 text-warning" />
+          </CardHeader>
+          <CardContent>
             <div className="text-2xl font-bold">
               {formatFileSize(files.reduce((sum, f) => sum + f.file_size, 0))}
             </div>
-            <p className="text-xs text-muted-foreground">Espace utilisé</p>
+            <p className="text-xs text-muted-foreground">Stockage total</p>
           </CardContent>
         </Card>
-        <Card>
-          <CardContent className="pt-6">
+        
+        <Card className="border-l-4 border-l-destructive bg-gradient-to-r from-destructive/5 to-transparent">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">En cours</CardTitle>
+            <Clock className="h-4 w-4 text-destructive" />
+          </CardHeader>
+          <CardContent>
             <div className="text-2xl font-bold">
               {files.filter(f => f.analysis_status === 'processing').length}
             </div>
-            <p className="text-xs text-muted-foreground">En cours</p>
+            <p className="text-xs text-muted-foreground">Analyses en cours</p>
           </CardContent>
         </Card>
       </div>
