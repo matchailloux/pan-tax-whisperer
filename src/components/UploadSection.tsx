@@ -4,12 +4,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Progress } from '@/components/ui/progress';
-import { Upload, FileText, X, Download } from 'lucide-react';
+import { Upload, FileText, X, Download, Info } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useUserFiles } from '@/hooks/useUserFiles';
 import { useVATReports } from '@/hooks/useVATReports';
 import { VATBreakdown } from './VATBreakdown';
 import { NewVATBreakdown } from './NewVATBreakdown';
+import { VATAnalyticsCharts } from './VATAnalyticsCharts';
 import { RulesConfig } from './RulesConfig';
 import { processVATWithNewRules } from '@/utils/newVATRulesEngine';
 import { processAmazonVATReport } from '@/utils/amazonVATEngine';
@@ -221,108 +222,116 @@ const UploadSection = () => {
   };
 
   return (
-    <div className="space-y-6">
-      {/* Upload Area */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Import de fichier CSV</CardTitle>
-          <CardDescription>
-            Téléchargez votre rapport TVA Amazon pour l'analyser automatiquement.
-            Les analyses sont automatiquement sauvegardées dans votre tableau de bord.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {!uploadedFile ? (
-            <div
-              className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
-                isDragActive
-                  ? 'border-primary bg-primary/5'
-                  : 'border-muted-foreground/25 hover:border-muted-foreground/50'
-              }`}
-              onDragEnter={handleDrag}
-              onDragLeave={handleDrag}
-              onDragOver={handleDrag}
-              onDrop={handleDrop}
-            >
-              <Upload className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
-              <h3 className="text-lg font-semibold mb-2">
-                Glissez-déposez votre fichier CSV ici
-              </h3>
-              <p className="text-muted-foreground mb-4">
-                ou cliquez pour sélectionner un fichier
-              </p>
-              <Button 
-                onClick={() => fileInputRef.current?.click()}
-                disabled={isProcessing}
-              >
-                {isProcessing ? 'Traitement...' : 'Choisir un fichier'}
-              </Button>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".csv"
-                onChange={handleFileInput}
-                className="hidden"
-              />
+    <div className="space-y-8">
+      {/* Upload Area - Design épuré */}
+      <Card className="border-2 border-dashed border-primary/20 bg-gradient-to-r from-primary/5 to-accent/5">
+        <CardContent className="pt-6">
+          <div className="text-center space-y-4">
+            <div className="mx-auto w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center">
+              <Upload className="h-8 w-8 text-primary" />
             </div>
-          ) : (
-            <div className="flex items-center justify-between p-4 border rounded-lg">
-              <div className="flex items-center gap-3">
-                <FileText className="h-8 w-8 text-muted-foreground" />
-                <div>
-                  <h4 className="font-medium">{uploadedFile.name}</h4>
+            <div>
+              <h3 className="text-xl font-semibold mb-2">Importez votre rapport Amazon</h3>
+              <p className="text-muted-foreground">
+                Glissez-déposez votre fichier CSV ou cliquez pour le sélectionner
+              </p>
+            </div>
+            {!uploadedFile ? (
+              <div
+                className={`border-2 border-dashed rounded-xl p-8 text-center transition-all duration-300 ${
+                  isDragActive
+                    ? 'border-primary bg-primary/10 scale-105'
+                    : 'border-muted-foreground/25 hover:border-primary/50 hover:bg-primary/5'
+                }`}
+                onDragEnter={handleDrag}
+                onDragLeave={handleDrag}
+                onDragOver={handleDrag}
+                onDrop={handleDrop}
+              >
+                <div className="space-y-4">
                   <p className="text-sm text-muted-foreground">
-                    {(uploadedFile.size / 1024).toFixed(1)} KB
-                    {isProcessing && ' - Traitement en cours...'}
+                    Formats supportés: .csv (Amazon VAT Transaction Report)
                   </p>
-                  {isProcessing && (
-                    <div className="mt-2 space-y-1">
-                      <div className="flex justify-between text-xs text-muted-foreground">
-                        <span>Progression</span>
-                        <span>{processingProgress}%</span>
-                      </div>
-                      <Progress value={processingProgress} className="w-full" />
-                    </div>
-                  )}
+                  <Button 
+                    size="lg"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={isProcessing}
+                    className="bg-gradient-primary hover:shadow-glow transition-all duration-300"
+                  >
+                    {isProcessing ? 'Traitement...' : 'Choisir un fichier'}
+                  </Button>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".csv"
+                    onChange={handleFileInput}
+                    className="hidden"
+                  />
                 </div>
               </div>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={resetAnalysis}
-                disabled={isProcessing}
-              >
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
-          )}
+            ) : (
+              <div className="bg-gradient-to-r from-accent/10 to-primary/10 p-6 rounded-xl border border-accent/20">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-4">
+                    <div className="p-3 bg-accent/20 rounded-lg">
+                      <FileText className="h-6 w-6 text-accent" />
+                    </div>
+                    <div>
+                      <h4 className="font-semibold text-lg">{uploadedFile.name}</h4>
+                      <p className="text-sm text-muted-foreground">
+                        {(uploadedFile.size / 1024).toFixed(1)} KB
+                        {isProcessing && ' - Analyse en cours...'}
+                      </p>
+                      {isProcessing && (
+                        <div className="mt-3 space-y-2">
+                          <div className="flex justify-between text-sm">
+                            <span className="text-muted-foreground">Progression</span>
+                            <span className="font-medium text-primary">{processingProgress}%</span>
+                          </div>
+                          <Progress value={processingProgress} className="h-2" />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={resetAnalysis}
+                    disabled={isProcessing}
+                    className="hover:bg-destructive/10 hover:text-destructive"
+                  >
+                    <X className="h-5 w-5" />
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
         </CardContent>
       </Card>
 
-      {/* Engine Selection */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Moteur d'analyse</CardTitle>
-          <CardDescription>
-            Choisissez le type d'analyse à effectuer sur vos données
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="flex items-center space-x-2">
-            <Switch
-              id="automatic-engine"
-              checked={useAutomaticEngine}
-              onCheckedChange={setUseAutomaticEngine}
-            />
-            <Label htmlFor="automatic-engine">
-              Utiliser le moteur automatique (recommandé)
-            </Label>
+      {/* Engine Selection - Design minimaliste */}
+      <Card className="bg-gradient-to-r from-background to-muted/30">
+        <CardContent className="pt-6">
+          <div className="flex items-center justify-between">
+            <div className="space-y-1">
+              <h3 className="font-medium">Moteur d'analyse</h3>
+              <p className="text-sm text-muted-foreground">
+                {useAutomaticEngine
+                  ? "Moteur automatique avec règles TVA européennes"
+                  : "Mode manuel avec configuration personnalisée"}
+              </p>
+            </div>
+            <div className="flex items-center space-x-3">
+              <Label htmlFor="automatic-engine" className="text-sm font-medium">
+                Auto
+              </Label>
+              <Switch
+                id="automatic-engine"
+                checked={useAutomaticEngine}
+                onCheckedChange={setUseAutomaticEngine}
+              />
+            </div>
           </div>
-          <p className="text-sm text-muted-foreground mt-2">
-            {useAutomaticEngine
-              ? "Le moteur automatique applique les dernières règles TVA européennes et effectue des vérifications de cohérence."
-              : "Mode manuel avec configuration de règles personnalisées."}
-          </p>
         </CardContent>
       </Card>
 
@@ -336,64 +345,87 @@ const UploadSection = () => {
         </Card>
       )}
 
-      {/* Results */}
+      {/* Résultats avec graphiques */}
       {newVatData && (
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle>Résultats d'analyse</CardTitle>
-                <CardDescription>
-                  Analyse automatique avec vérifications de cohérence
-                </CardDescription>
-              </div>
-              <Button onClick={exportToExcel} variant="outline">
-                <Download className="mr-2 h-4 w-4" />
-                Exporter Excel
-              </Button>
+        <div className="space-y-6">
+          {/* Header des résultats */}
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-2xl font-bold">Résultats d'analyse</h2>
+              <p className="text-muted-foreground">
+                Analyse automatique avec vérifications de cohérence
+              </p>
             </div>
-          </CardHeader>
-          <CardContent>
-            <NewVATBreakdown report={newVatData} fileName={uploadedFile?.name} />
-          </CardContent>
-        </Card>
+            <Button onClick={exportToExcel} className="bg-gradient-primary hover:shadow-glow">
+              <Download className="mr-2 h-4 w-4" />
+              Exporter Excel
+            </Button>
+          </div>
+
+          {/* Graphiques d'analyse */}
+          <VATAnalyticsCharts report={newVatData} />
+
+          {/* Détails complets */}
+          <NewVATBreakdown report={newVatData} fileName={uploadedFile?.name} />
+        </div>
       )}
 
       {vatBreakdown && (
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle>Résultats d'analyse</CardTitle>
-                <CardDescription>
-                  Analyse avec règles personnalisées
-                </CardDescription>
-              </div>
-              <Button onClick={exportToExcel} variant="outline">
-                <Download className="mr-2 h-4 w-4" />
-                Exporter Excel
-              </Button>
+        <div className="space-y-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-2xl font-bold">Résultats d'analyse</h2>
+              <p className="text-muted-foreground">
+                Analyse avec moteur legacy
+              </p>
             </div>
-          </CardHeader>
-          <CardContent>
-            <VATBreakdown data={vatBreakdown?.pivotView || []} fileName={uploadedFile?.name} />
-          </CardContent>
-        </Card>
+            <Button onClick={exportToExcel} className="bg-gradient-primary hover:shadow-glow">
+              <Download className="mr-2 h-4 w-4" />
+              Exporter Excel
+            </Button>
+          </div>
+          
+          <Card>
+            <CardContent className="pt-6">
+              <VATBreakdown data={vatBreakdown?.pivotView || []} fileName={uploadedFile?.name} />
+            </CardContent>
+          </Card>
+        </div>
       )}
 
-      {/* Instructions */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Comment obtenir votre rapport Amazon</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <ol className="list-decimal list-inside space-y-3 text-sm">
-            <li>Connectez-vous à Amazon Seller Central</li>
-            <li>Allez dans Rapports → Paiements → Rapports d'activité de transaction</li>
-            <li>Générez un rapport "Amazon VAT Transaction Report"</li>
-            <li>Téléchargez le fichier CSV généré</li>
-            <li>Importez-le ici pour analyse automatique</li>
-          </ol>
+      {/* Instructions - Design épuré */}
+      <Card className="bg-gradient-to-r from-muted/30 to-accent/5 border-accent/20">
+        <CardContent className="pt-6">
+          <div className="flex items-start gap-4">
+            <div className="p-2 bg-accent/20 rounded-lg">
+              <Info className="h-5 w-5 text-accent" />
+            </div>
+            <div className="flex-1">
+              <h3 className="font-semibold mb-3">Comment obtenir votre rapport Amazon</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <span className="w-6 h-6 bg-primary text-primary-foreground rounded-full flex items-center justify-center text-xs font-medium">1</span>
+                    <span>Seller Central → Rapports</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="w-6 h-6 bg-primary text-primary-foreground rounded-full flex items-center justify-center text-xs font-medium">2</span>
+                    <span>Paiements → Activité transaction</span>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <span className="w-6 h-6 bg-primary text-primary-foreground rounded-full flex items-center justify-center text-xs font-medium">3</span>
+                    <span>Générer "VAT Transaction Report"</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="w-6 h-6 bg-primary text-primary-foreground rounded-full flex items-center justify-center text-xs font-medium">4</span>
+                    <span>Importer le fichier CSV ici</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
         </CardContent>
       </Card>
     </div>
