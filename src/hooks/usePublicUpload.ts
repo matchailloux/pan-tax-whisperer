@@ -29,7 +29,7 @@ export const usePublicUpload = (clientId: string) => {
 
       if (fileId) {
         // Analyse automatique du fichier
-        const analysisResult = await analyzeFile(file, fileId, updateFileStatus);
+        const analysisResult = await analyzeFile(file, fileId, updateFileStatus, clientId);
         
         setUploadProgress(100);
 

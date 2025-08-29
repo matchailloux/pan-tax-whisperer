@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { useVATReports } from '@/hooks/useVATReports';
+import { useClientVATReports } from '@/hooks/useClientVATReports';
 import { processVATWithNewRules, DetailedVATReport } from '@/utils/newVATRulesEngine';
 import { processAmazonVATReport } from '@/utils/amazonVATEngine';
 
@@ -14,13 +14,14 @@ export interface AnalysisResult {
 export const useVATAnalysis = () => {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const { toast } = useToast();
-  const { saveReport } = useVATReports();
+  const { saveReport } = useClientVATReports();
 
   const analyzeFileContent = async (
     fileContent: string, 
     fileName: string, 
     fileId: string,
-    updateFileStatus?: (fileId: string, status: string) => Promise<void>
+    updateFileStatus?: (fileId: string, status: string) => Promise<void>,
+    clientId?: string
   ): Promise<AnalysisResult> => {
     setIsAnalyzing(true);
     
@@ -34,7 +35,7 @@ export const useVATAnalysis = () => {
 
       if (Array.isArray(automaticReport.breakdown) && automaticReport.breakdown.length > 0) {
         // Succès avec le moteur automatique
-        const reportId = await saveReport(automaticReport, `Analyse ${fileName}`, fileId);
+        const reportId = await saveReport(automaticReport, `Analyse ${fileName}`, fileId, clientId);
         
         if (updateFileStatus) {
           await updateFileStatus(fileId, 'completed');
@@ -56,7 +57,7 @@ export const useVATAnalysis = () => {
       } else {
         // Fallback vers le moteur legacy
         const legacyReport = processAmazonVATReport(fileContent);
-        const reportId = await saveReport(legacyReport, `Analyse ${fileName} (fallback)`, fileId);
+        const reportId = await saveReport(legacyReport, `Analyse ${fileName} (fallback)`, fileId, clientId);
         
         if (updateFileStatus) {
           await updateFileStatus(fileId, 'completed');
@@ -101,11 +102,12 @@ export const useVATAnalysis = () => {
   const analyzeFile = async (
     file: File,
     fileId: string,
-    updateFileStatus?: (fileId: string, status: string) => Promise<void>
+    updateFileStatus?: (fileId: string, status: string) => Promise<void>,
+    clientId?: string
   ): Promise<AnalysisResult> => {
     try {
       const fileContent = await file.text();
-      return await analyzeFileContent(fileContent, file.name, fileId, updateFileStatus);
+      return await analyzeFileContent(fileContent, file.name, fileId, updateFileStatus, clientId);
     } catch (error) {
       console.error('Erreur lors de la lecture du fichier:', error);
       toast({

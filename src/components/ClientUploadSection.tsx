@@ -36,7 +36,7 @@ const ClientUploadSection: React.FC<ClientUploadSectionProps> = ({ clientId, cli
         });
 
         // Analyse automatique du fichier
-        await analyzeFile(file, fileId, updateFileStatus);
+        await analyzeFile(file, fileId, updateFileStatus, clientId);
       }
     } catch (error) {
       console.error('Erreur lors de l\'upload:', error);
