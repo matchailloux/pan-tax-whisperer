@@ -3,6 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { 
   BarChart3, 
   Download, 
@@ -47,12 +48,15 @@ import {
 import { useVATReports } from '@/hooks/useVATReports';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
+import { NewVATBreakdown } from '@/components/NewVATBreakdown';
 
 const ReportsPage = () => {
   const { reports, loading, deleteReport, getReportsStats } = useVATReports();
   const [searchTerm, setSearchTerm] = useState('');
   const [periodFilter, setPeriodFilter] = useState<string>('all');
   const [viewMode, setViewMode] = useState<'list' | 'charts'>('list');
+  const [selectedReport, setSelectedReport] = useState<any>(null);
+  const [showReportDialog, setShowReportDialog] = useState(false);
   const stats = getReportsStats();
 
   const filteredReports = useMemo(() => {
@@ -138,6 +142,11 @@ const ReportsPage = () => {
 
   const exportToExcel = (report: any) => {
     console.log('Export Excel pour:', report.report_name);
+  };
+
+  const handleViewReport = (report: any) => {
+    setSelectedReport(report);
+    setShowReportDialog(true);
   };
 
   const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8'];
@@ -418,7 +427,7 @@ const ReportsPage = () => {
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
-                            <DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => handleViewReport(report)}>
                               <Eye className="mr-2 h-4 w-4" />
                               Voir le rapport
                             </DropdownMenuItem>
@@ -465,6 +474,18 @@ const ReportsPage = () => {
           </Card>
         </div>
       )}
+
+      {/* Report Detail Dialog */}
+      <Dialog open={showReportDialog} onOpenChange={setShowReportDialog}>
+        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Détail du rapport - {selectedReport?.report_name}</DialogTitle>
+          </DialogHeader>
+          {selectedReport && (
+            <NewVATBreakdown report={selectedReport.report_data} fileName={selectedReport.report_name} />
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
