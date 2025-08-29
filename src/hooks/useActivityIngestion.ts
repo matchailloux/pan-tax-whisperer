@@ -21,9 +21,9 @@ export const useActivityIngestion = () => {
       const formData = new FormData();
       formData.append('file', csvBlob, fileName);
 
-      // Appeler l'Edge Function d'ingestion
-      const { data, error } = await supabase.functions.invoke('ingest-activity', {
-        body: formData
+      // Appeler la nouvelle Edge Function d'import CSV (mapping auto)
+      const { data, error } = await supabase.functions.invoke('import-activity-csv', {
+        body: formData,
       });
 
       if (error) {

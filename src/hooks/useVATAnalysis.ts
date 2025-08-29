@@ -24,17 +24,31 @@ export const useVATAnalysis = () => {
       const formData = new FormData();
       formData.append('file', blob, fileName);
 
-      const { error } = await supabase.functions.invoke('import-activity-csv', {
-        body: formData
+      // Récupérer le JWT utilisateur
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData.session?.access_token;
+      if (!accessToken) {
+        console.warn('No access token for activity import');
+        return;
+      }
+
+      const resp = await fetch('https://lxulrlyzieqvxrsgfxoj.supabase.co/functions/v1/import-activity-csv', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${accessToken}` },
+        body: formData,
       });
 
-      if (error) {
-        console.warn('Activity ingestion failed:', error);
-      } else {
-        console.log('Activity ingestion successful');
-        // Déclencher le refresh des données d'activité
-        window.dispatchEvent(new CustomEvent('activity-data-updated'));
+      if (!resp.ok) {
+        const err = await resp.text();
+        console.warn('Activity ingestion failed:', err);
+        return;
       }
+
+      const json = await resp.json();
+      console.log('Activity ingestion successful', json);
+
+      // Déclencher le refresh des données d'activité
+      window.dispatchEvent(new CustomEvent('activity-data-updated'));
     } catch (error) {
       console.warn('Activity ingestion error:', error);
     }
