@@ -1,10 +1,11 @@
 import { useState, useMemo } from 'react';
 import { SEOHead } from '@/components/SEOHead';
-import ActivityFilters from '@/components/activity/ActivityFilters';
+import ActivityFiltersComponent from '@/components/activity/ActivityFilters';
 import KpiCards from '@/components/activity/KpiCards';
 import { TimeSeriesGrossTax, ByCountryBar } from '@/components/activity/ActivityCharts';
 import ActivityTable from '@/components/activity/ActivityTable';
-import { useActivitySummary, useActivityBreakdown, useActivityTimeseries, type ActivityFilters as F } from '@/hooks/useActivityData';
+import ActivityTestUpload from '@/components/activity/ActivityTestUpload';
+import { useActivitySummary, useActivityBreakdown, useActivityTimeseries, type ActivityFilters } from '@/hooks/useActivityData';
 
 const todayISO = new Date().toISOString().slice(0, 10);
 const monthStartISO = (() => {
@@ -13,7 +14,7 @@ const monthStartISO = (() => {
 })();
 
 const ActivityPage = () => {
-  const [f, setF] = useState<F>({
+  const [f, setF] = useState<ActivityFilters>({
     from: monthStartISO,
     to: todayISO,
     type: 'BOTH',
@@ -53,7 +54,8 @@ const ActivityPage = () => {
           </p>
         </div>
 
-        <ActivityFilters initial={f} onChange={setF} />
+        <ActivityTestUpload />
+        <ActivityFiltersComponent initial={f} onChange={setF} />
         
         <KpiCards
           gross={Number(summary?.gross_amount || 0)}

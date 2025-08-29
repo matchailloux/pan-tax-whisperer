@@ -2383,6 +2383,10 @@ export type Database = {
           value: number
         }[]
       }
+      exec: {
+        Args: { query: string }
+        Returns: string
+      }
       ff_hash_bucket: {
         Args: { seed: string }
         Returns: number
@@ -2419,6 +2423,10 @@ export type Database = {
           _user_id: string
         }
         Returns: boolean
+      }
+      ingest_activity_replace: {
+        Args: { p_upload_id: string }
+        Returns: undefined
       }
       is_feature_enabled: {
         Args: {
