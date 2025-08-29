@@ -1,16 +1,26 @@
-import React from 'react';
-import { Link } from 'react-router-dom';
+import React, { useEffect } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { FileText, TrendingUp, Activity, Settings, Upload, Clock } from 'lucide-react';
 import { useDashboardStats } from '@/hooks/useDashboardStats';
 import { useVATReports } from '@/hooks/useVATReports';
 import { useUserFiles } from '@/hooks/useUserFiles';
+import { useOrganization } from '@/hooks/useOrganization';
 
 const DashboardHome = () => {
+  const navigate = useNavigate();
+  const { isFirmMode, loading: orgLoading } = useOrganization();
   const { stats, formatGrowth, formatAmount, formatLastActivity } = useDashboardStats();
   const { reports } = useVATReports();
   const { files } = useUserFiles();
+
+  // Redirect FIRM users to their dedicated dashboard
+  useEffect(() => {
+    if (!orgLoading && isFirmMode()) {
+      navigate('/dashboard/firm', { replace: true });
+    }
+  }, [isFirmMode, orgLoading, navigate]);
 
   const recentActivity = [
     ...files.slice(0, 3).map(file => ({

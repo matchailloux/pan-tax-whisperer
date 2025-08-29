@@ -9,6 +9,7 @@ import ActivityPage from '@/pages/dashboard/ActivityPage';
 import DataPage from '@/pages/dashboard/DataPage';
 import SettingsPage from '@/pages/dashboard/SettingsPage';
 import HelpPage from '@/pages/dashboard/HelpPage';
+import FirmDashboard from '@/pages/dashboard/FirmDashboard';
 
 const DashboardRoutes = () => {
   return (
@@ -22,6 +23,7 @@ const DashboardRoutes = () => {
         <Route path="data" element={<DataPage />} />
         <Route path="settings" element={<SettingsPage />} />
         <Route path="help" element={<HelpPage />} />
+        <Route path="firm/*" element={<FirmDashboard />} />
       </Route>
     </Routes>
   );
