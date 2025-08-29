@@ -1,5 +1,6 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { useEffect } from 'react';
 
 export type ActivityFilters = {
   from: string;
@@ -11,6 +12,20 @@ export type ActivityFilters = {
 };
 
 export function useActivitySummary(f: ActivityFilters) {
+  const queryClient = useQueryClient();
+
+  // Écouter les mises à jour d'activité
+  useEffect(() => {
+    const handleActivityUpdate = () => {
+      queryClient.invalidateQueries({ queryKey: ['activity_summary'] });
+      queryClient.invalidateQueries({ queryKey: ['activity_breakdown'] });
+      queryClient.invalidateQueries({ queryKey: ['activity_timeseries'] });
+    };
+
+    window.addEventListener('activity-data-updated', handleActivityUpdate);
+    return () => window.removeEventListener('activity-data-updated', handleActivityUpdate);
+  }, [queryClient]);
+
   return useQuery({
     queryKey: ['activity_summary', f],
     queryFn: async () => {

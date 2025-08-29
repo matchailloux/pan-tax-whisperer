@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useClientVATReports } from '@/hooks/useClientVATReports';
+import { useActivityIngestion } from '@/hooks/useActivityIngestion';
 import { processVATWithNewRules, DetailedVATReport } from '@/utils/newVATRulesEngine';
 import { processAmazonVATReport } from '@/utils/amazonVATEngine';
 
@@ -15,6 +16,7 @@ export const useVATAnalysis = () => {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const { toast } = useToast();
   const { saveReport } = useClientVATReports();
+  const { ingestFromCSV } = useActivityIngestion();
 
   const analyzeFileContent = async (
     fileContent: string, 
@@ -29,6 +31,11 @@ export const useVATAnalysis = () => {
       if (updateFileStatus) {
         await updateFileStatus(fileId, 'processing');
       }
+
+      // Ingestion simultanée pour le module Activité (en arrière-plan, non bloquant)
+      ingestFromCSV(fileContent, fileName).catch(error => {
+        console.warn('Activity ingestion failed (non-blocking):', error);
+      });
 
       // Essai avec le moteur automatique d'abord
       const automaticReport = processVATWithNewRules(fileContent);
