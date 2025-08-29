@@ -1,28 +1,42 @@
 import React, { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/contexts/AuthContext';
-import { ArrowLeft, Eye, EyeOff } from 'lucide-react';
+import { ArrowLeft, Eye, EyeOff, Building2, User } from 'lucide-react';
 
 const Auth = () => {
+  const [searchParams] = useSearchParams();
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
+  const [firmName, setFirmName] = useState('');
+  const [firmAddress, setFirmAddress] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [accountType, setAccountType] = useState<'individual' | 'accountant'>('individual');
   
   const { signIn, signUp, user } = useAuth();
   const navigate = useNavigate();
 
+  // Détecter le type d'inscription depuis l'URL
+  useEffect(() => {
+    const type = searchParams.get('type');
+    if (type === 'accountant') {
+      setAccountType('accountant');
+    }
+  }, [searchParams]);
+
   // Redirect if user is already authenticated
   useEffect(() => {
     if (user) {
+      // Redirection intelligente sera gérée par AuthContext
       navigate('/dashboard');
     }
   }, [user, navigate]);
@@ -35,7 +49,7 @@ const Auth = () => {
       if (isLogin) {
         await signIn(email, password);
       } else {
-        await signUp(email, password, firstName, lastName);
+        await signUp(email, password, firstName, lastName, accountType, firmName, firmAddress);
       }
     } finally {
       setIsLoading(false);
@@ -47,6 +61,8 @@ const Auth = () => {
     setPassword('');
     setFirstName('');
     setLastName('');
+    setFirmName('');
+    setFirmAddress('');
   };
 
   return (
@@ -72,6 +88,35 @@ const Auth = () => {
             </CardDescription>
           </CardHeader>
           <CardContent>
+            {/* Account Type Selection */}
+            {!isLogin && (
+              <div className="mb-6">
+                <Label className="text-base font-medium mb-4 block">Type de compte</Label>
+                <div className="grid grid-cols-2 gap-4">
+                  <Button
+                    type="button"
+                    variant={accountType === 'individual' ? 'default' : 'outline'}
+                    className="h-auto p-4 flex flex-col gap-2"
+                    onClick={() => setAccountType('individual')}
+                  >
+                    <User className="w-5 h-5" />
+                    <span className="font-medium">Individuel</span>
+                    <span className="text-xs text-muted-foreground">Pour vendeurs Amazon</span>
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={accountType === 'accountant' ? 'default' : 'outline'}
+                    className="h-auto p-4 flex flex-col gap-2"
+                    onClick={() => setAccountType('accountant')}
+                  >
+                    <Building2 className="w-5 h-5" />
+                    <span className="font-medium">Cabinet</span>
+                    <span className="text-xs text-muted-foreground">Pour comptables</span>
+                  </Button>
+                </div>
+              </div>
+            )}
+
             <Tabs value={isLogin ? 'login' : 'signup'} onValueChange={(value) => {
               setIsLogin(value === 'login');
               resetForm();
@@ -133,7 +178,46 @@ const Auth = () => {
               </TabsContent>
               
               <TabsContent value="signup" className="space-y-4 mt-6">
+                {accountType === 'accountant' && (
+                  <div className="mb-4 p-3 bg-primary/10 border border-primary/20 rounded-lg">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Building2 className="w-4 h-4 text-primary" />
+                      <Badge variant="secondary">Cabinet Comptable</Badge>
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      Vous créez un compte pour votre cabinet comptable avec gestion multi-clients.
+                    </p>
+                  </div>
+                )}
+                
                 <form onSubmit={handleSubmit} className="space-y-4">
+                  {accountType === 'accountant' && (
+                    <div className="space-y-4 p-4 bg-secondary/30 rounded-lg">
+                      <h4 className="font-medium text-sm text-foreground">Informations du cabinet</h4>
+                      <div className="space-y-2">
+                        <Label htmlFor="firmName">Nom du cabinet *</Label>
+                        <Input
+                          id="firmName"
+                          type="text"
+                          value={firmName}
+                          onChange={(e) => setFirmName(e.target.value)}
+                          required={accountType === 'accountant'}
+                          placeholder="Cabinet Dupont & Associés"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="firmAddress">Adresse du cabinet</Label>
+                        <Input
+                          id="firmAddress"
+                          type="text"
+                          value={firmAddress}
+                          onChange={(e) => setFirmAddress(e.target.value)}
+                          placeholder="123 Rue de la Comptabilité, 75001 Paris"
+                        />
+                      </div>
+                    </div>
+                  )}
+
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label htmlFor="firstName">Prénom</Label>

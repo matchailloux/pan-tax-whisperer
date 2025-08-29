@@ -3,6 +3,7 @@ import Hero from "@/components/Hero";
 import Features from "@/components/Features";
 import UploadSection from "@/components/UploadSection";
 import Pricing from "@/components/Pricing";
+import AccountantSection from "@/components/AccountantSection";
 import Footer from "@/components/Footer";
 import SEOHead from "@/components/SEOHead";
 
@@ -25,6 +26,7 @@ const Index = () => {
           <div id="upload">
             <UploadSection />
           </div>
+          <AccountantSection />
           <div id="pricing">
             <Pricing />
           </div>

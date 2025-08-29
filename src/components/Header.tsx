@@ -10,7 +10,7 @@ const Header = () => {
     { name: "Fonctionnalités", href: "#features" },
     { name: "Comment ça marche", href: "#upload" },
     { name: "Tarifs", href: "#pricing" },
-    { name: "Landing 2", href: "/landing-2" },
+    { name: "Pour les comptables", href: "#accountant" },
     { name: "Contact", href: "#contact" }
   ];
 

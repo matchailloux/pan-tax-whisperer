@@ -1,13 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { ArrowLeft, Calendar, FileText, Send, Settings } from 'lucide-react';
+import { ArrowLeft, Calendar, FileText, Send, Settings, Upload, BarChart3 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useClientAccounts } from '@/hooks/useClientAccounts';
 import { useInvitations } from '@/hooks/useInvitations';
 import { LoadingSpinner } from '@/components/LoadingSpinner';
 import CreateInvitationDialog from '@/components/CreateInvitationDialog';
+import ClientUploadSection from '@/components/ClientUploadSection';
 
 const FirmClientDetails = () => {
   const { clientId } = useParams<{ clientId: string }>();
@@ -166,27 +168,70 @@ const FirmClientDetails = () => {
         </CardContent>
       </Card>
 
-      {/* File Uploads */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <FileText className="h-5 w-5" />
-            Fichiers déposés
-          </CardTitle>
-          <CardDescription>
-            Historique des fichiers TVA déposés par le client
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="text-center py-8">
-            <FileText className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-            <h3 className="text-lg font-semibold mb-2">Aucun fichier</h3>
-            <p className="text-muted-foreground">
-              Aucun fichier n'a encore été déposé par ce client.
-            </p>
-          </div>
-        </CardContent>
-      </Card>
+      {/* Tabbed Interface for Client Management */}
+      <Tabs defaultValue="uploads" className="space-y-6">
+        <TabsList className="grid w-full grid-cols-3">
+          <TabsTrigger value="uploads" className="flex items-center gap-2">
+            <Upload className="h-4 w-4" />
+            Fichiers & Upload
+          </TabsTrigger>
+          <TabsTrigger value="analysis" className="flex items-center gap-2">
+            <BarChart3 className="h-4 w-4" />
+            Analyse TVA
+          </TabsTrigger>
+          <TabsTrigger value="history" className="flex items-center gap-2">
+            <Calendar className="h-4 w-4" />
+            Historique
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="uploads">
+          <ClientUploadSection 
+            clientId={clientId!} 
+            clientName={client.display_name} 
+          />
+        </TabsContent>
+
+        <TabsContent value="analysis">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <BarChart3 className="h-5 w-5" />
+                Analyses TVA en cours
+              </CardTitle>
+              <CardDescription>
+                Suivi des analyses automatiques des fichiers de transaction
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="text-center py-8 text-muted-foreground">
+                <BarChart3 className="h-12 w-12 mx-auto mb-4" />
+                <p>Les analyses apparaîtront ici après upload des fichiers</p>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="history">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Calendar className="h-5 w-5" />
+                Historique complet
+              </CardTitle>
+              <CardDescription>
+                Chronologie de toutes les activités du client
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="text-center py-8 text-muted-foreground">
+                <Calendar className="h-12 w-12 mx-auto mb-4" />
+                <p>L'historique des activités apparaîtra ici</p>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
 
       <CreateInvitationDialog
         open={showInviteDialog}

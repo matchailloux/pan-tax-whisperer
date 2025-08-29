@@ -55,6 +55,25 @@ const Pricing = () => {
       popular: false,
       cta: "Nous contacter",
       variant: "accent" as const
+    },
+    {
+      name: "Cabinet Comptable",
+      price: "149",
+      period: "mois",
+      description: "Solution dédiée aux cabinets comptables",
+      features: [
+        "Gestion multi-clients illimitée",
+        "Interface comptable spécialisée",
+        "Invitations clients sécurisées",
+        "Analyses TVA par client",
+        "Rapports consolidés",
+        "Support prioritaire dédié",
+        "Formation incluse"
+      ],
+      popular: false,
+      cta: "Créer mon cabinet",
+      variant: "accent" as const,
+      isAccountant: true
     }
   ];
 
@@ -71,7 +90,7 @@ const Pricing = () => {
           </p>
         </div>
 
-        <div className="grid md:grid-cols-3 gap-8 max-w-6xl mx-auto">
+        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8 max-w-7xl mx-auto">
           {plans.map((plan, index) => (
             <Card 
               key={index} 
@@ -118,9 +137,12 @@ const Pricing = () => {
                   variant={plan.variant} 
                   size="lg" 
                   className="w-full group"
+                  asChild
                 >
-                  {plan.cta}
-                  {plan.popular && <Zap className="w-4 h-4 group-hover:scale-110 transition-transform" />}
+                  <a href={plan.isAccountant ? '/auth?type=accountant' : '/auth'}>
+                    {plan.cta}
+                    {plan.popular && <Zap className="w-4 h-4 group-hover:scale-110 transition-transform" />}
+                  </a>
                 </Button>
               </CardContent>
             </Card>
