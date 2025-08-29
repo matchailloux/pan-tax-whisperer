@@ -8,14 +8,14 @@ import ActivityTestUpload from '@/components/activity/ActivityTestUpload';
 import { useActivitySummary, useActivityBreakdown, useActivityTimeseries, type ActivityFilters } from '@/hooks/useActivityData';
 
 const todayISO = new Date().toISOString().slice(0, 10);
-const monthStartISO = (() => {
+const yearStartISO = (() => {
   const d = new Date();
-  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1)).toISOString().slice(0, 10);
+  return new Date(Date.UTC(d.getUTCFullYear(), 0, 1)).toISOString().slice(0, 10);
 })();
 
 const ActivityPage = () => {
   const [f, setF] = useState<ActivityFilters>({
-    from: monthStartISO,
+    from: yearStartISO,
     to: todayISO,
     type: 'BOTH',
     country: null,
