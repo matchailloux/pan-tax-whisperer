@@ -8,6 +8,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/contexts/AuthContext';
 import { ArrowLeft, Eye, EyeOff, Building2, User } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
+import { useToast } from '@/hooks/use-toast';
 
 const Auth = () => {
   const [searchParams] = useSearchParams();
@@ -24,6 +26,7 @@ const Auth = () => {
   
   const { signIn, signUp, user } = useAuth();
   const navigate = useNavigate();
+  const { toast } = useToast();
 
   // Détecter le type d'inscription depuis l'URL
   useEffect(() => {
@@ -51,6 +54,40 @@ const Auth = () => {
         await signIn(email, password);
       } else {
         await signUp(email, password, firstName, lastName, accountType, firmName, firmAddress);
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleResend = async () => {
+    if (!email) {
+      toast({
+        title: 'Email manquant',
+        description: 'Saisissez votre email pour renvoyer la confirmation.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    setIsLoading(true);
+    try {
+      const redirectUrl = `${window.location.origin}/`;
+      const { error } = await supabase.auth.resend({
+        type: 'signup',
+        email,
+        options: { emailRedirectTo: redirectUrl },
+      } as any);
+      if (error) {
+        toast({
+          title: 'Échec de l’envoi',
+          description: error.message,
+          variant: 'destructive',
+        });
+      } else {
+        toast({
+          title: 'Email renvoyé',
+          description: 'Vérifiez votre boîte de réception et vos spams.',
+        });
       }
     } finally {
       setIsLoading(false);
@@ -185,6 +222,17 @@ const Auth = () => {
                   >
                     {isLoading ? 'Connexion...' : 'Se connecter'}
                   </Button>
+                  <div className="text-center">
+                    <Button
+                      type="button"
+                      variant="link"
+                      size="sm"
+                      onClick={handleResend}
+                      disabled={isLoading || !email}
+                    >
+                      Renvoyer l’email de confirmation
+                    </Button>
+                  </div>
                 </form>
               </TabsContent>
               
@@ -302,6 +350,17 @@ const Auth = () => {
                   >
                     {isLoading ? 'Création...' : 'Créer un compte'}
                   </Button>
+                  <div className="text-center">
+                    <Button
+                      type="button"
+                      variant="link"
+                      size="sm"
+                      onClick={handleResend}
+                      disabled={isLoading || !email}
+                    >
+                      Renvoyer l’email de confirmation
+                    </Button>
+                  </div>
                 </form>
               </TabsContent>
             </Tabs>
