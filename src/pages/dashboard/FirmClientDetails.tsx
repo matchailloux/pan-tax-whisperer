@@ -111,14 +111,70 @@ const FirmClientDetails = () => {
         </CardContent>
       </Card>
 
-      {/* Latest Analysis Results */}
-      <LatestAnalysisCard 
-        clientId={clientId!} 
-        clientName={client.display_name} 
-      />
+      {/* Tabbed Interface for Client Management */}
+      <Tabs defaultValue="uploads" className="space-y-6">
+        <TabsList className="grid w-full grid-cols-3">
+          <TabsTrigger value="uploads" className="flex items-center gap-2">
+            <Upload className="h-4 w-4" />
+            Fichiers & Upload
+          </TabsTrigger>
+          <TabsTrigger value="analysis" className="flex items-center gap-2">
+            <BarChart3 className="h-4 w-4" />
+            Analyse TVA
+          </TabsTrigger>
+          <TabsTrigger value="history" className="flex items-center gap-2">
+            <Calendar className="h-4 w-4" />
+            Historique
+          </TabsTrigger>
+        </TabsList>
 
-      {/* Invitations */}
-      <Card>
+        <TabsContent value="uploads">
+          <ClientUploadSection 
+            clientId={clientId!} 
+            clientName={client.display_name} 
+          />
+
+          {/* Latest Analysis Results - Moved below upload section */}
+          <div className="mt-6">
+            <LatestAnalysisCard 
+              clientId={clientId!} 
+              clientName={client.display_name} 
+            />
+          </div>
+
+          {/* Reports Analysis - Below Latest Analysis */}
+          <div className="mt-6">
+            <ClientVATAnalysis />
+          </div>
+        </TabsContent>
+
+        <TabsContent value="analysis">
+          <ClientVATAnalysis />
+        </TabsContent>
+
+        <TabsContent value="history">
+          <Card className="border-l-4 border-l-accent bg-gradient-to-r from-accent/5 to-transparent">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Calendar className="h-5 w-5" />
+                Historique complet
+              </CardTitle>
+              <CardDescription>
+                Chronologie de toutes les activités du client
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="text-center py-8 text-muted-foreground">
+                <Calendar className="h-12 w-12 mx-auto mb-4" />
+                <p>L'historique des activités apparaîtra ici</p>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
+
+      {/* Invitations - Moved to bottom */}
+      <Card className="border-l-4 border-l-warning bg-gradient-to-r from-warning/5 to-transparent">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Calendar className="h-5 w-5" />
@@ -136,7 +192,7 @@ const FirmClientDetails = () => {
           ) : clientInvitations.length > 0 ? (
             <div className="space-y-4">
               {clientInvitations.map((invitation) => (
-                <div key={invitation.id} className="flex items-center justify-between p-4 border rounded-lg">
+                <div key={invitation.id} className="flex items-center justify-between p-4 border rounded-lg hover:shadow-md transition-shadow">
                   <div>
                     <div className="font-medium">Période {invitation.period}</div>
                     <div className="text-sm text-muted-foreground">
@@ -175,55 +231,6 @@ const FirmClientDetails = () => {
           )}
         </CardContent>
       </Card>
-
-      {/* Tabbed Interface for Client Management */}
-      <Tabs defaultValue="uploads" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-3">
-          <TabsTrigger value="uploads" className="flex items-center gap-2">
-            <Upload className="h-4 w-4" />
-            Fichiers & Upload
-          </TabsTrigger>
-          <TabsTrigger value="analysis" className="flex items-center gap-2">
-            <BarChart3 className="h-4 w-4" />
-            Analyse TVA
-          </TabsTrigger>
-          <TabsTrigger value="history" className="flex items-center gap-2">
-            <Calendar className="h-4 w-4" />
-            Historique
-          </TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="uploads">
-          <ClientUploadSection 
-            clientId={clientId!} 
-            clientName={client.display_name} 
-          />
-        </TabsContent>
-
-        <TabsContent value="analysis">
-          <ClientVATAnalysis />
-        </TabsContent>
-
-        <TabsContent value="history">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Calendar className="h-5 w-5" />
-                Historique complet
-              </CardTitle>
-              <CardDescription>
-                Chronologie de toutes les activités du client
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="text-center py-8 text-muted-foreground">
-                <Calendar className="h-12 w-12 mx-auto mb-4" />
-                <p>L'historique des activités apparaîtra ici</p>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
 
       <CreateInvitationDialog
         open={showInviteDialog}
