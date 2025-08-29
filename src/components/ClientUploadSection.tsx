@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useClientFiles } from '@/hooks/useClientFiles';
 import { useClientVATReports } from '@/hooks/useClientVATReports';
+import { useVATAnalysis } from '@/hooks/useVATAnalysis';
 import { useToast } from '@/hooks/use-toast';
 
 interface ClientUploadSectionProps {
@@ -17,19 +18,28 @@ const ClientUploadSection: React.FC<ClientUploadSectionProps> = ({ clientId, cli
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   
-  const { files, uploadFile, loading: filesLoading } = useClientFiles(clientId);
+  const { files, uploadFile, updateFileStatus, loading: filesLoading } = useClientFiles(clientId);
   const { reports, loading: reportsLoading } = useClientVATReports(clientId);
+  const { analyzeFile, isAnalyzing } = useVATAnalysis();
   const { toast } = useToast();
 
   const handleFileUpload = async (file: File) => {
     setIsUploading(true);
     try {
-      await uploadFile(file, clientId);
-      toast({
-        title: "Fichier uploadé",
-        description: `Le fichier ${file.name} a été téléchargé avec succès pour ${clientName}.`,
-      });
+      // Upload du fichier vers Supabase Storage
+      const fileId = await uploadFile(file, clientId);
+      
+      if (fileId) {
+        toast({
+          title: "Fichier uploadé",
+          description: `Le fichier ${file.name} a été téléchargé avec succès pour ${clientName}. Analyse en cours...`,
+        });
+
+        // Analyse automatique du fichier
+        await analyzeFile(file, fileId, updateFileStatus);
+      }
     } catch (error) {
+      console.error('Erreur lors de l\'upload:', error);
       toast({
         title: "Erreur d'upload",
         description: "Impossible de télécharger le fichier. Veuillez réessayer.",
@@ -122,10 +132,10 @@ const ClientUploadSection: React.FC<ClientUploadSectionProps> = ({ clientId, cli
               
               <div className="flex gap-4">
                 <Button
-                  disabled={isUploading}
+                  disabled={isUploading || isAnalyzing}
                   onClick={() => document.getElementById('file-input')?.click()}
                 >
-                  {isUploading ? 'Upload en cours...' : 'Sélectionner un fichier'}
+                  {isUploading || isAnalyzing ? 'Traitement en cours...' : 'Sélectionner un fichier'}
                 </Button>
               </div>
               

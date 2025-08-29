@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { FileUp, Building, Calendar, CheckCircle, XCircle, AlertCircle } from 'lucide-react';
 import { useInvitations } from '@/hooks/useInvitations';
+import { usePublicUpload } from '@/hooks/usePublicUpload';
 import { LoadingSpinner } from '@/components/LoadingSpinner';
 import SEOHead from '@/components/SEOHead';
 
@@ -14,10 +15,9 @@ const PublicUpload = () => {
   const [invitation, setInvitation] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [uploadStatus, setUploadStatus] = useState('idle'); // idle, uploading, success, error
-  const [uploadProgress, setUploadProgress] = useState(0);
   
   const { validateInvitation, incrementInvitationUsage } = useInvitations();
+  const { uploadStatus, uploadProgress, handleFileUpload } = usePublicUpload(invitation?.client_account_id);
   const token = searchParams.get('token');
 
   useEffect(() => {
@@ -46,32 +46,18 @@ const PublicUpload = () => {
     checkInvitation();
   }, [token, validateInvitation]);
 
-  const handleFileUpload = async (file) => {
+  const handlePublicFileUpload = async (file) => {
     if (!file || !invitation) return;
 
-    setUploadStatus('uploading');
-    setUploadProgress(0);
-
     try {
-      // Simulate upload progress
-      const progressInterval = setInterval(() => {
-        setUploadProgress(prev => Math.min(prev + 10, 90));
-      }, 200);
-
-      // Here you would implement the actual file upload logic
-      // For now, we'll simulate it
-      await new Promise(resolve => setTimeout(resolve, 3000));
-
-      clearInterval(progressInterval);
-      setUploadProgress(100);
-
-      // Increment invitation usage
-      await incrementInvitationUsage(invitation.id);
-
-      setUploadStatus('success');
+      await handleFileUpload(file);
+      
+      // Increment invitation usage only after successful upload and analysis
+      if (uploadStatus === 'success') {
+        await incrementInvitationUsage(invitation.id);
+      }
     } catch (error) {
-      console.error('Upload error:', error);
-      setUploadStatus('error');
+      console.error('Erreur lors de l\'upload public:', error);
     }
   };
 
@@ -83,14 +69,14 @@ const PublicUpload = () => {
     e.preventDefault();
     const files = Array.from(e.dataTransfer.files);
     if (files.length > 0) {
-      handleFileUpload(files[0]);
+      handlePublicFileUpload(files[0]);
     }
   };
 
   const handleFileSelect = (e) => {
     const files = Array.from(e.target.files);
     if (files.length > 0) {
-      handleFileUpload(files[0]);
+      handlePublicFileUpload(files[0]);
     }
   };
 
@@ -199,10 +185,10 @@ const PublicUpload = () => {
             <Alert className="border-success bg-success/10">
               <CheckCircle className="h-4 w-4 text-success" />
               <AlertDescription className="text-success">
-                <strong>Fichier déposé avec succès !</strong>
+                <strong>Fichier traité avec succès !</strong>
                 <br />
-                Votre fichier a été reçu et l'analyse va commencer automatiquement. 
-                Votre cabinet comptable sera notifié de la réception.
+                Votre fichier a été uploadé et analysé automatiquement. 
+                Votre cabinet comptable a été notifié et peut consulter les résultats.
               </AlertDescription>
             </Alert>
           ) : uploadStatus === 'error' ? (
