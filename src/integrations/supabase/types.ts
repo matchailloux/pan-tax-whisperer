@@ -2337,6 +2337,52 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      activity_breakdown: {
+        Args: {
+          p_from: string
+          p_group_by: string
+          p_to: string
+          p_type?: string
+        }
+        Returns: {
+          avg_sales: number
+          gross: number
+          key: string
+          tax: number
+          transactions: number
+        }[]
+      }
+      activity_summary: {
+        Args: {
+          p_country?: string
+          p_from: string
+          p_include_refunds?: boolean
+          p_to: string
+          p_type?: string
+        }
+        Returns: {
+          average_sales: number
+          currency: string
+          gross_amount: number
+          tax_amount: number
+          total_transactions: number
+        }[]
+      }
+      activity_timeseries: {
+        Args: {
+          p_from: string
+          p_group_by_country?: boolean
+          p_interval: string
+          p_metric: string
+          p_to: string
+          p_type?: string
+        }
+        Returns: {
+          group_key: string
+          period: string
+          value: number
+        }[]
+      }
       ff_hash_bucket: {
         Args: { seed: string }
         Returns: number
@@ -2386,6 +2432,10 @@ export type Database = {
       is_org_admin_for_business: {
         Args: { _business_id: string; _user_id: string }
         Returns: boolean
+      }
+      norm_country: {
+        Args: { raw: string }
+        Returns: string
       }
     }
     Enums: {
