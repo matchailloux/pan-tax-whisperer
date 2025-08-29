@@ -30,6 +30,7 @@ const Auth = () => {
     const type = searchParams.get('type');
     if (type === 'accountant') {
       setAccountType('accountant');
+      setIsLogin(false); // Default to signup tab for accountants
     }
   }, [searchParams]);
 
@@ -80,11 +81,21 @@ const Auth = () => {
 
         <Card className="border-border/50 backdrop-blur-sm">
           <CardHeader className="text-center">
-            <CardTitle className="text-2xl font-bold">
-              TVA Analysis Pro
-            </CardTitle>
+            <div className="flex items-center justify-center gap-2 mb-2">
+              <CardTitle className="text-2xl font-bold">
+                TVA Analysis Pro
+              </CardTitle>
+              {accountType === 'accountant' && (
+                <Badge variant="secondary" className="bg-primary/10 text-primary">
+                  Mode Cabinet
+                </Badge>
+              )}
+            </div>
             <CardDescription>
-              Accédez à votre tableau de bord d'analyse TVA
+              {accountType === 'accountant' 
+                ? 'Accédez à votre espace cabinet comptable'
+                : 'Accédez à votre tableau de bord d\'analyse TVA'
+              }
             </CardDescription>
           </CardHeader>
           <CardContent>

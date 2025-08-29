@@ -46,6 +46,9 @@ const Header = () => {
             <Button variant="ghost" asChild>
               <Link to="/auth">Se connecter</Link>
             </Button>
+            <Button variant="outline" asChild>
+              <Link to="/auth?type=accountant">Espace cabinet</Link>
+            </Button>
             <Button variant="hero" asChild>
               <Link to="/auth">Essai gratuit</Link>
             </Button>
@@ -77,6 +80,9 @@ const Header = () => {
               <div className="px-4 pt-4 space-y-2">
                 <Button variant="ghost" className="w-full justify-start" asChild>
                   <Link to="/auth">Se connecter</Link>
+                </Button>
+                <Button variant="outline" className="w-full justify-start" asChild>
+                  <Link to="/auth?type=accountant">Espace cabinet</Link>
                 </Button>
                 <Button variant="hero" className="w-full" asChild>
                   <Link to="/auth">Essai gratuit</Link>

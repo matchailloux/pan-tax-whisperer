@@ -104,7 +104,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({
+    const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
@@ -120,6 +120,30 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         title: "Connexion réussie",
         description: "Bienvenue !",
       });
+      
+      // Smart redirection based on organization type
+      if (data.user) {
+        setTimeout(async () => {
+          try {
+            const { data: membership } = await supabase
+              .from('memberships')
+              .select(`
+                business_id,
+                businesses!inner(type)
+              `)
+              .eq('user_id', data.user.id)
+              .single();
+
+            if (membership?.businesses?.type === 'FIRM') {
+              window.location.href = '/dashboard/firm';
+            } else {
+              window.location.href = '/dashboard';
+            }
+          } catch (error) {
+            window.location.href = '/dashboard';
+          }
+        }, 100);
+      }
     }
 
     return { error };
