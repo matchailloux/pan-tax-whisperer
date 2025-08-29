@@ -14,6 +14,66 @@ export type Database = {
   }
   public: {
     Tables: {
+      activity_events_v1: {
+        Row: {
+          amount_bucket: string
+          amount_gross: number
+          amount_net: number
+          amount_tax: number
+          business_id: string
+          client_account_id: string | null
+          country: string
+          created_at: string
+          currency: string
+          event_date: string
+          event_ts: string
+          id: string
+          sign: number
+          type: string
+          upload_id: string
+          vat_rate: number
+          vat_rate_pct: number
+        }
+        Insert: {
+          amount_bucket: string
+          amount_gross: number
+          amount_net: number
+          amount_tax: number
+          business_id: string
+          client_account_id?: string | null
+          country: string
+          created_at?: string
+          currency: string
+          event_date: string
+          event_ts: string
+          id?: string
+          sign: number
+          type: string
+          upload_id: string
+          vat_rate: number
+          vat_rate_pct: number
+        }
+        Update: {
+          amount_bucket?: string
+          amount_gross?: number
+          amount_net?: number
+          amount_tax?: number
+          business_id?: string
+          client_account_id?: string | null
+          country?: string
+          created_at?: string
+          currency?: string
+          event_date?: string
+          event_ts?: string
+          id?: string
+          sign?: number
+          type?: string
+          upload_id?: string
+          vat_rate?: number
+          vat_rate_pct?: number
+        }
+        Relationships: []
+      }
       alerts: {
         Row: {
           baseline_days: number
@@ -1628,6 +1688,51 @@ export type Database = {
           owner_user_id?: string
           tags?: string[] | null
           updated_at?: string
+        }
+        Relationships: []
+      }
+      stg_amz_transactions: {
+        Row: {
+          business_id: string
+          client_account_id: string | null
+          created_at: string | null
+          id: string
+          taxable_jurisdiction: string | null
+          total_activity_value_amt_vat_excl: number | null
+          total_activity_value_amt_vat_incl: number | null
+          total_activity_value_vat_amt: number | null
+          transaction_currency_code: string | null
+          transaction_depart_date: string | null
+          transaction_type: string | null
+          upload_id: string
+        }
+        Insert: {
+          business_id: string
+          client_account_id?: string | null
+          created_at?: string | null
+          id?: string
+          taxable_jurisdiction?: string | null
+          total_activity_value_amt_vat_excl?: number | null
+          total_activity_value_amt_vat_incl?: number | null
+          total_activity_value_vat_amt?: number | null
+          transaction_currency_code?: string | null
+          transaction_depart_date?: string | null
+          transaction_type?: string | null
+          upload_id: string
+        }
+        Update: {
+          business_id?: string
+          client_account_id?: string | null
+          created_at?: string | null
+          id?: string
+          taxable_jurisdiction?: string | null
+          total_activity_value_amt_vat_excl?: number | null
+          total_activity_value_amt_vat_incl?: number | null
+          total_activity_value_vat_amt?: number | null
+          transaction_currency_code?: string | null
+          transaction_depart_date?: string | null
+          transaction_type?: string | null
+          upload_id?: string
         }
         Relationships: []
       }
