@@ -162,6 +162,7 @@ export type Database = {
           description: string | null
           id: string
           name: string
+          type: string
           updated_at: string
         }
         Insert: {
@@ -169,6 +170,7 @@ export type Database = {
           description?: string | null
           id?: string
           name: string
+          type?: string
           updated_at?: string
         }
         Update: {
@@ -176,6 +178,7 @@ export type Database = {
           description?: string | null
           id?: string
           name?: string
+          type?: string
           updated_at?: string
         }
         Relationships: []
@@ -537,6 +540,47 @@ export type Database = {
         }
         Relationships: []
       }
+      client_accounts: {
+        Row: {
+          country: string | null
+          created_at: string | null
+          display_name: string
+          id: string
+          organization_id: string
+          oss_opt_in: boolean | null
+          updated_at: string | null
+          vat_number: string | null
+        }
+        Insert: {
+          country?: string | null
+          created_at?: string | null
+          display_name: string
+          id?: string
+          organization_id: string
+          oss_opt_in?: boolean | null
+          updated_at?: string | null
+          vat_number?: string | null
+        }
+        Update: {
+          country?: string | null
+          created_at?: string | null
+          display_name?: string
+          id?: string
+          organization_id?: string
+          oss_opt_in?: boolean | null
+          updated_at?: string | null
+          vat_number?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_accounts_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "businesses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       external_signals: {
         Row: {
           business_id: string
@@ -812,6 +856,50 @@ export type Database = {
           ref_type?: string
         }
         Relationships: []
+      }
+      invitations: {
+        Row: {
+          client_account_id: string
+          created_at: string | null
+          created_by: string
+          expires_at: string
+          id: string
+          max_uses: number | null
+          period: string
+          token_hash: string
+          used_count: number | null
+        }
+        Insert: {
+          client_account_id: string
+          created_at?: string | null
+          created_by: string
+          expires_at: string
+          id?: string
+          max_uses?: number | null
+          period: string
+          token_hash: string
+          used_count?: number | null
+        }
+        Update: {
+          client_account_id?: string
+          created_at?: string | null
+          created_by?: string
+          expires_at?: string
+          id?: string
+          max_uses?: number | null
+          period?: string
+          token_hash?: string
+          used_count?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "invitations_client_account_id_fkey"
+            columns: ["client_account_id"]
+            isOneToOne: false
+            referencedRelation: "client_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       invites: {
         Row: {
@@ -1846,38 +1934,52 @@ export type Database = {
       user_files: {
         Row: {
           analysis_status: string | null
+          client_account_id: string | null
           created_at: string
           file_name: string
           file_size: number | null
           file_type: string | null
           id: string
+          period: string | null
           storage_path: string | null
           upload_date: string
           user_id: string
         }
         Insert: {
           analysis_status?: string | null
+          client_account_id?: string | null
           created_at?: string
           file_name: string
           file_size?: number | null
           file_type?: string | null
           id?: string
+          period?: string | null
           storage_path?: string | null
           upload_date?: string
           user_id: string
         }
         Update: {
           analysis_status?: string | null
+          client_account_id?: string | null
           created_at?: string
           file_name?: string
           file_size?: number | null
           file_type?: string | null
           id?: string
+          period?: string | null
           storage_path?: string | null
           upload_date?: string
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "user_files_client_account_id_fkey"
+            columns: ["client_account_id"]
+            isOneToOne: false
+            referencedRelation: "client_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       user_settings: {
         Row: {
@@ -1915,6 +2017,7 @@ export type Database = {
       vat_reports: {
         Row: {
           analysis_date: string
+          client_account_id: string | null
           created_at: string
           currency: string | null
           file_id: string | null
@@ -1927,6 +2030,7 @@ export type Database = {
         }
         Insert: {
           analysis_date?: string
+          client_account_id?: string | null
           created_at?: string
           currency?: string | null
           file_id?: string | null
@@ -1939,6 +2043,7 @@ export type Database = {
         }
         Update: {
           analysis_date?: string
+          client_account_id?: string | null
           created_at?: string
           currency?: string | null
           file_id?: string | null
@@ -1950,6 +2055,13 @@ export type Database = {
           user_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "vat_reports_client_account_id_fkey"
+            columns: ["client_account_id"]
+            isOneToOne: false
+            referencedRelation: "client_accounts"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "vat_reports_file_id_fkey"
             columns: ["file_id"]
