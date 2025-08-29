@@ -1,5 +1,5 @@
 import React from 'react';
-import { Routes, Route } from 'react-router-dom';
+import { Routes, Route, Navigate } from 'react-router-dom';
 import { useOrganization } from '@/hooks/useOrganization';
 import IndividualDashboardLayout from './IndividualDashboardLayout';
 import FirmDashboardLayout from './FirmDashboardLayout';
@@ -31,21 +31,21 @@ const DashboardRoutes = () => {
     );
   }
 
-  // Interface Cabinet Comptable
   if (isFirmMode()) {
+    // Interface Cabinet Comptable
     return (
       <Routes>
-        <Route path="/firm" element={<FirmDashboardLayout />}>
-          <Route index element={<FirmDashboard />} />
-          <Route path="clients" element={<FirmClients />} />
-          <Route path="clients/:clientId" element={<FirmClientDetails />} />
-          <Route path="reports" element={<FirmReports />} />
-          <Route path="activity" element={<FirmActivity />} />
-          <Route path="settings" element={<FirmSettings />} />
-          <Route path="help" element={<FirmHelp />} />
+        <Route path="/*" element={<FirmDashboardLayout />}> 
+          {/* redirige /dashboard vers /dashboard/firm */}
+          <Route index element={<Navigate to="firm" replace />} />
+          <Route path="firm" element={<FirmDashboard />} />
+          <Route path="firm/clients" element={<FirmClients />} />
+          <Route path="firm/clients/:clientId" element={<FirmClientDetails />} />
+          <Route path="firm/reports" element={<FirmReports />} />
+          <Route path="firm/activity" element={<FirmActivity />} />
+          <Route path="firm/settings" element={<FirmSettings />} />
+          <Route path="firm/help" element={<FirmHelp />} />
         </Route>
-        {/* Fallback to firm dashboard */}
-        <Route path="/*" element={<FirmDashboard />} />
       </Routes>
     );
   }
@@ -53,7 +53,7 @@ const DashboardRoutes = () => {
   // Interface Individuelle
   return (
     <Routes>
-      <Route path="/" element={<IndividualDashboardLayout />}>
+      <Route path="/*" element={<IndividualDashboardLayout />}> 
         <Route index element={<DashboardHome />} />
         <Route path="analysis" element={<AnalysisPage />} />
         <Route path="documents" element={<DocumentsPage />} />
