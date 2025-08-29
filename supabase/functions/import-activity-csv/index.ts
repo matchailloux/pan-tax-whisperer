@@ -52,10 +52,17 @@ function toISODate(s: string): string {
   const t = (s || "").trim();
   if (!t) throw new Error("Empty date");
   
-  // Handle DD/MM/YYYY format
+  // Handle DD/MM/YYYY format with slashes
   const dmy = t.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
   if (dmy) {
     const [_, dd, mm, yyyy] = dmy;
+    return new Date(Date.UTC(Number(yyyy), Number(mm) - 1, Number(dd))).toISOString();
+  }
+  
+  // Handle DD-MM-YYYY format with dashes
+  const dmyDash = t.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/);
+  if (dmyDash) {
+    const [_, dd, mm, yyyy] = dmyDash;
     return new Date(Date.UTC(Number(yyyy), Number(mm) - 1, Number(dd))).toISOString();
   }
   
