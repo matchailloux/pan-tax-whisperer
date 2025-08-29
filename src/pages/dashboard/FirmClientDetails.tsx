@@ -10,6 +10,7 @@ import { useInvitations } from '@/hooks/useInvitations';
 import { LoadingSpinner } from '@/components/LoadingSpinner';
 import CreateInvitationDialog from '@/components/CreateInvitationDialog';
 import ClientUploadSection from '@/components/ClientUploadSection';
+import ClientVATAnalysis from '@/components/ClientVATAnalysis';
 
 const FirmClientDetails = () => {
   const { clientId } = useParams<{ clientId: string }>();
@@ -193,23 +194,7 @@ const FirmClientDetails = () => {
         </TabsContent>
 
         <TabsContent value="analysis">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <BarChart3 className="h-5 w-5" />
-                Analyses TVA en cours
-              </CardTitle>
-              <CardDescription>
-                Suivi des analyses automatiques des fichiers de transaction
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="text-center py-8 text-muted-foreground">
-                <BarChart3 className="h-12 w-12 mx-auto mb-4" />
-                <p>Les analyses apparaîtront ici après upload des fichiers</p>
-              </div>
-            </CardContent>
-          </Card>
+          <ClientVATAnalysis />
         </TabsContent>
 
         <TabsContent value="history">

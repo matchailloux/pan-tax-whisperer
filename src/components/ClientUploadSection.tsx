@@ -202,7 +202,7 @@ const ClientUploadSection: React.FC<ClientUploadSectionProps> = ({ clientId, cli
         <CardHeader>
           <CardTitle>Rapports d'analyse TVA ({reports.length})</CardTitle>
           <CardDescription>
-            Historique des analyses TVA générées pour ce client
+            Analyses TVA générées automatiquement avec le moteur de règles avancé
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -232,9 +232,14 @@ const ClientUploadSection: React.FC<ClientUploadSectionProps> = ({ clientId, cli
                       Montant total: {report.total_amount.toFixed(2)} {report.currency}
                     </p>
                   </div>
-                  <Button variant="outline" size="sm">
-                    Télécharger
-                  </Button>
+                  <div className="flex gap-2">
+                    <Button variant="outline" size="sm">
+                      Voir l'analyse
+                    </Button>
+                    <Button variant="outline" size="sm">
+                      Télécharger
+                    </Button>
+                  </div>
                 </div>
               ))}
             </div>

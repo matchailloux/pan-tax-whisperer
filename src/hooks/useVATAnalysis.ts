@@ -1,7 +1,8 @@
 import { useState } from 'react';
+import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useVATReports } from '@/hooks/useVATReports';
-import { processVATWithNewRules } from '@/utils/newVATRulesEngine';
+import { processVATWithNewRules, DetailedVATReport } from '@/utils/newVATRulesEngine';
 import { processAmazonVATReport } from '@/utils/amazonVATEngine';
 
 export interface AnalysisResult {
@@ -113,9 +114,27 @@ export const useVATAnalysis = () => {
     }
   };
 
+  const getStoredReport = async (reportId: string): Promise<DetailedVATReport | null> => {
+    try {
+      const { data, error } = await supabase
+        .from('vat_reports')
+        .select('report_data')
+        .eq('id', reportId)
+        .single();
+
+      if (error) throw error;
+      
+      return (data?.report_data as unknown) as DetailedVATReport || null;
+    } catch (error) {
+      console.error('Erreur lors de la récupération du rapport:', error);
+      return null;
+    }
+  };
+
   return {
     analyzeFile,
     analyzeFileContent,
-    isAnalyzing
+    isAnalyzing,
+    getStoredReport
   };
 };
