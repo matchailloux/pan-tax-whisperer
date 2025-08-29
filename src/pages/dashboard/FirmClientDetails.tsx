@@ -11,6 +11,7 @@ import { LoadingSpinner } from '@/components/LoadingSpinner';
 import CreateInvitationDialog from '@/components/CreateInvitationDialog';
 import ClientUploadSection from '@/components/ClientUploadSection';
 import ClientVATAnalysis from '@/components/ClientVATAnalysis';
+import LatestAnalysisCard from '@/components/LatestAnalysisCard';
 
 const FirmClientDetails = () => {
   const { clientId } = useParams<{ clientId: string }>();
@@ -109,6 +110,12 @@ const FirmClientDetails = () => {
           </div>
         </CardContent>
       </Card>
+
+      {/* Latest Analysis Results */}
+      <LatestAnalysisCard 
+        clientId={clientId!} 
+        clientName={client.display_name} 
+      />
 
       {/* Invitations */}
       <Card>

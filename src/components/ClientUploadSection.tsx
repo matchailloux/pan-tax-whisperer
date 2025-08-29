@@ -233,7 +233,15 @@ const ClientUploadSection: React.FC<ClientUploadSectionProps> = ({ clientId, cli
                     </p>
                   </div>
                   <div className="flex gap-2">
-                    <Button variant="outline" size="sm">
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => {
+                        // Naviguer vers l'onglet analyse ou ouvrir un dialog avec l'analyse
+                        const tabsElement = document.querySelector('[data-value="analysis"]') as HTMLButtonElement;
+                        tabsElement?.click();
+                      }}
+                    >
                       Voir l'analyse
                     </Button>
                     <Button variant="outline" size="sm">

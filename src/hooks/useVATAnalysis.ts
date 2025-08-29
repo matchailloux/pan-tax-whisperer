@@ -45,6 +45,9 @@ export const useVATAnalysis = () => {
           description: `${automaticReport.breakdown.length} pays analysés avec succès.`,
         });
 
+        // Refresh immédiat des rapports
+        window.dispatchEvent(new CustomEvent('vat-analysis-completed'));
+
         return {
           success: true,
           data: automaticReport,
@@ -63,6 +66,9 @@ export const useVATAnalysis = () => {
           title: "Analyse terminée (fallback)",
           description: "Moteur automatique n'a rien détecté, bascule vers le moteur legacy effectuée.",
         });
+
+        // Refresh immédiat des rapports
+        window.dispatchEvent(new CustomEvent('vat-analysis-completed'));
 
         return {
           success: true,

@@ -162,6 +162,16 @@ export const useClientVATReports = (clientAccountId?: string) => {
     }
   }, [user, clientAccountId]);
 
+  // Écouter les événements de nouvelles analyses
+  useEffect(() => {
+    const handleAnalysisCompleted = () => {
+      fetchReports();
+    };
+
+    window.addEventListener('vat-analysis-completed', handleAnalysisCompleted);
+    return () => window.removeEventListener('vat-analysis-completed', handleAnalysisCompleted);
+  }, [fetchReports]);
+
   return {
     reports,
     loading,
