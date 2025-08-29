@@ -112,7 +112,7 @@ const SYNONYMS: Record<string, string[]> = {
     "total_activity_value_amt_vat_excl","ht","net","amount_net","price_net","montant_ht"
   ],
   TRANSACTION_DEPART_DATE: [
-    "transaction_depart_date","date","transaction_date","order_date","purchase_date","event_date","date_operation"
+    "transaction_depart_date","date","transaction_date","order_date","purchase_date","event_date","date_operation","activity_period"
   ],
   TRANSACTION_TYPE: [
     "transaction_type","type","operation","event_type","order_type","sales_or_refund"
