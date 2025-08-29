@@ -292,13 +292,13 @@ Deno.serve(async (req: Request): Promise<Response> => {
         business_id: c.business_id,
         client_account_id: c.client_account_id,
         upload_id: c.upload_id,
-        TAXABLE_JURISDICTION: c.TAXABLE_JURISDICTION,
-        TRANSACTION_CURRENCY_CODE: c.TRANSACTION_CURRENCY_CODE,
-        TOTAL_ACTIVITY_VALUE_AMT_VAT_INCL: c.TOTAL_ACTIVITY_VALUE_AMT_VAT_INCL,
-        TOTAL_ACTIVITY_VALUE_VAT_AMT: c.TOTAL_ACTIVITY_VALUE_VAT_AMT,
-        TOTAL_ACTIVITY_VALUE_AMT_VAT_EXCL: c.TOTAL_ACTIVITY_VALUE_AMT_VAT_EXCL,
-        TRANSACTION_DEPART_DATE: c.TRANSACTION_DEPART_DATE,
-        TRANSACTION_TYPE: c.TRANSACTION_TYPE
+        taxable_jurisdiction: c.TAXABLE_JURISDICTION,
+        transaction_currency_code: c.TRANSACTION_CURRENCY_CODE,
+        total_activity_value_amt_vat_incl: c.TOTAL_ACTIVITY_VALUE_AMT_VAT_INCL,
+        total_activity_value_vat_amt: c.TOTAL_ACTIVITY_VALUE_VAT_AMT,
+        total_activity_value_amt_vat_excl: c.TOTAL_ACTIVITY_VALUE_AMT_VAT_EXCL,
+        transaction_depart_date: c.TRANSACTION_DEPART_DATE,
+        transaction_type: c.TRANSACTION_TYPE
       }));
 
       const { error: insErr, count } = await admin
