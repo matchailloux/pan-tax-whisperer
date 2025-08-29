@@ -85,8 +85,12 @@ function normUpper(s: string | null | undefined, fallback = "UNKNOWN"): string {
 }
 
 function normType(s: string | null | undefined): "SALES" | "REFUND" {
-  const v = (s ?? "").toString().trim().toUpperCase();
-  if (v.includes("REFUND") || v.includes("RETURN") || v === "R" || v === "CREDIT") return "REFUND";
+  const upper = normUpper(s);
+  // Explicit REFUND synonyms
+  if (["REFUND", "RETURN", "REMBOURSEMENT", "CREDIT", "R"].includes(upper)) {
+    return "REFUND";
+  }
+  // Everything else is SALES (including SALE, VENTE, ORDER, etc.)
   return "SALES";
 }
 
@@ -238,7 +242,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
       );
     }
 
-    // 4) Transformation → lignes canoniques
+    // 4) Transformation → lignes canoniques avec tolérance aux erreurs
     const hdrIndex = new Map(rawHeaders.map((h, i) => [h!, i]));
     const toVal = (row: string[], headerName: string | null) => {
       if (!headerName) return "";
@@ -247,6 +251,10 @@ Deno.serve(async (req: Request): Promise<Response> => {
     };
 
     const canonRows: CanonicalRow[] = [];
+    let skippedRows = 0;
+    let salesCount = 0;
+    let refundCount = 0;
+    
     for (let i = 0; i < rows.length; i++) {
       const r = rows[i];
       if (!r || r.every(c => (c ?? "").toString().trim() === "")) continue; // skip empty lines
@@ -272,12 +280,15 @@ Deno.serve(async (req: Request): Promise<Response> => {
           TRANSACTION_DEPART_DATE: dateISO,
           TRANSACTION_TYPE: type
         });
+        
+        // Count transaction types for observability
+        if (type === "SALES") salesCount++;
+        else if (type === "REFUND") refundCount++;
+        
       } catch (e) {
-        console.error(`Error parsing row ${i + 2}:`, e);
-        return new Response(
-          JSON.stringify({ ok: false, error: "row_parse_error", line: i + 2, message: String(e) }),
-          { status: 422, headers: { ...corsHeaders, "content-type": "application/json" } }
-        );
+        skippedRows++;
+        console.warn(`Skipping row ${i + 2} due to error:`, e.message, "Data:", r.slice(0, 3));
+        // Continue processing instead of returning error
       }
     }
 
@@ -287,7 +298,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
       });
     }
 
-    console.log(`Parsed ${canonRows.length} valid rows`);
+    console.log(`Ingestion summary: ${canonRows.length} valid rows processed (${salesCount} SALES, ${refundCount} REFUNDS), ${skippedRows} rows skipped`);
 
     // 5) Insert batch en staging via service role (chunks)
     const admin = createClient(url, service);
@@ -336,7 +347,17 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
     console.log('Activity ingestion completed successfully');
 
-    return new Response(JSON.stringify({ ok: true, upload_id, inserted }), {
+    return new Response(JSON.stringify({ 
+      ok: true, 
+      upload_id, 
+      inserted, 
+      summary: {
+        total_processed: canonRows.length,
+        sales_count: salesCount,
+        refund_count: refundCount,
+        skipped_rows: skippedRows
+      }
+    }), {
       status: 200, headers: { ...corsHeaders, "content-type": "application/json" }
     });
 
