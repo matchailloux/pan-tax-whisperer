@@ -16,9 +16,11 @@ export const useVATAnalysis = () => {
   const { toast } = useToast();
   const { saveReport } = useClientVATReports();
 
-  // Fonction pour appeler l'Edge Function d'ingestion d'activité
+  // Fonction pour appeler l'Edge Function d'ingestion d'activité (automatique lors des analyses TVA)
   const ingestActivityFromFile = async (fileContent: string, fileName: string) => {
     try {
+      console.log('🚀 Auto-ingestion Activité démarrée pour:', fileName);
+
       // Créer un blob à partir du contenu CSV
       const blob = new Blob([fileContent], { type: 'text/csv' });
       const formData = new FormData();
@@ -28,8 +30,8 @@ export const useVATAnalysis = () => {
       const { data: sessionData } = await supabase.auth.getSession();
       const accessToken = sessionData.session?.access_token;
       if (!accessToken) {
-        console.warn('No access token for activity import');
-        return;
+        console.error('❌ Pas de token JWT pour l\'ingestion automatique');
+        return false;
       }
 
       const resp = await fetch('https://lxulrlyzieqvxrsgfxoj.supabase.co/functions/v1/import-activity-csv', {
@@ -40,17 +42,19 @@ export const useVATAnalysis = () => {
 
       if (!resp.ok) {
         const err = await resp.text();
-        console.warn('Activity ingestion failed:', err);
-        return;
+        console.error('❌ Échec ingestion automatique Activité:', err);
+        return false;
       }
 
       const json = await resp.json();
-      console.log('Activity ingestion successful', json);
+      console.log('✅ Ingestion automatique Activité réussie:', json);
 
       // Déclencher le refresh des données d'activité
       window.dispatchEvent(new CustomEvent('activity-data-updated'));
+      return true;
     } catch (error) {
-      console.warn('Activity ingestion error:', error);
+      console.error('❌ Erreur ingestion automatique Activité:', error);
+      return false;
     }
   };
 
@@ -68,10 +72,19 @@ export const useVATAnalysis = () => {
         await updateFileStatus(fileId, 'processing');
       }
 
-      // Ingestion simultanée pour le module Activité (en arrière-plan, non bloquant)
-      ingestActivityFromFile(fileContent, fileName).catch(error => {
-        console.warn('Activity ingestion failed (non-blocking):', error);
-      });
+      // 🚀 Ingestion automatique pour le module Activité (parallèle à l'analyse TVA)
+      console.log('🔄 Démarrage ingestion automatique Activité lors de l\'analyse TVA...');
+      ingestActivityFromFile(fileContent, fileName)
+        .then(success => {
+          if (success) {
+            console.log('✅ Ingestion automatique Activité terminée avec succès');
+          } else {
+            console.warn('⚠️ Ingestion automatique Activité échouée (non bloquante)');
+          }
+        })
+        .catch(error => {
+          console.warn('⚠️ Erreur ingestion automatique Activité (non bloquante):', error);
+        });
 
       // Essai avec le moteur automatique d'abord
       const automaticReport = processVATWithNewRules(fileContent);
