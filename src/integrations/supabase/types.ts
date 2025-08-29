@@ -2172,7 +2172,14 @@ export type Database = {
       }
     }
     Enums: {
-      app_role: "ORG_ADMIN" | "SITE_MANAGER" | "SITE_STAFF" | "VIEW_ONLY"
+      app_role:
+        | "ORG_ADMIN"
+        | "SITE_MANAGER"
+        | "SITE_STAFF"
+        | "VIEW_ONLY"
+        | "FIRM_ADMIN"
+        | "ACCOUNTANT"
+        | "CONTRIBUTOR"
       ck_order_status:
         | "Draft"
         | "Sent"
@@ -2312,7 +2319,15 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      app_role: ["ORG_ADMIN", "SITE_MANAGER", "SITE_STAFF", "VIEW_ONLY"],
+      app_role: [
+        "ORG_ADMIN",
+        "SITE_MANAGER",
+        "SITE_STAFF",
+        "VIEW_ONLY",
+        "FIRM_ADMIN",
+        "ACCOUNTANT",
+        "CONTRIBUTOR",
+      ],
       ck_order_status: [
         "Draft",
         "Sent",
