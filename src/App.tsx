@@ -2,7 +2,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import Index from "./pages/Index";
 import Landing2 from "./pages/Landing2";
 import Auth from "./pages/Auth";
@@ -42,6 +42,7 @@ const App = () => (
               <Route path="/landing-2" element={<Landing2 />} />
               <Route path="/auth" element={<Auth />} />
               <Route path="/upload" element={<PublicUpload />} />
+              <Route path="/firm" element={<Navigate to="/dashboard/firm" replace />} />
               <Route path="/dashboard/*" element={
                 <ProtectedRoute>
                   <DashboardRoutes />
