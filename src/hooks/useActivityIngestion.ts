@@ -21,21 +21,32 @@ export const useActivityIngestion = () => {
       const formData = new FormData();
       formData.append('file', csvBlob, fileName);
 
-      // Appeler la nouvelle Edge Function d'import CSV (mapping auto)
-      const { data, error } = await supabase.functions.invoke('import-activity-csv', {
+      // Récupérer le JWT pour appeler l'Edge Function en multipart
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData.session?.access_token;
+      if (!accessToken) {
+        console.warn('No access token available for activity ingestion');
+        return false;
+      }
+
+      const resp = await fetch('https://lxulrlyzieqvxrsgfxoj.supabase.co/functions/v1/import-activity-csv', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${accessToken}` },
         body: formData,
       });
 
-      if (error) {
-        console.error('Activity ingestion error:', error);
-        throw error;
+      if (!resp.ok) {
+        const txt = await resp.text();
+        console.error('Activity ingestion HTTP error:', txt);
+        throw new Error(txt);
       }
 
+      const data = await resp.json();
       console.log('Activity ingestion successful:', data);
       
       toast({
         title: "Données d'activité ingérées",
-        description: `${data.rows_processed} transactions Amazon traitées pour le module Activité.`,
+        description: `${data.inserted ?? 0} lignes traitées (upload ${data.upload_id}).`,
       });
 
       // Déclencher un refresh des données d'activité
