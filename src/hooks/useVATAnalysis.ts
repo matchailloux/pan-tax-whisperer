@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useClientVATReports } from '@/hooks/useClientVATReports';
-import { useActivityIngestion } from '@/hooks/useActivityIngestion';
 import { processVATWithNewRules, DetailedVATReport } from '@/utils/newVATRulesEngine';
 import { processAmazonVATReport } from '@/utils/amazonVATEngine';
 
@@ -16,7 +15,30 @@ export const useVATAnalysis = () => {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const { toast } = useToast();
   const { saveReport } = useClientVATReports();
-  const { ingestFromCSV } = useActivityIngestion();
+
+  // Fonction pour appeler l'Edge Function d'ingestion d'activité
+  const ingestActivityFromFile = async (fileContent: string, fileName: string) => {
+    try {
+      // Créer un blob à partir du contenu CSV
+      const blob = new Blob([fileContent], { type: 'text/csv' });
+      const formData = new FormData();
+      formData.append('file', blob, fileName);
+
+      const { error } = await supabase.functions.invoke('import-activity-csv', {
+        body: formData
+      });
+
+      if (error) {
+        console.warn('Activity ingestion failed:', error);
+      } else {
+        console.log('Activity ingestion successful');
+        // Déclencher le refresh des données d'activité
+        window.dispatchEvent(new CustomEvent('activity-data-updated'));
+      }
+    } catch (error) {
+      console.warn('Activity ingestion error:', error);
+    }
+  };
 
   const analyzeFileContent = async (
     fileContent: string, 
@@ -33,7 +55,7 @@ export const useVATAnalysis = () => {
       }
 
       // Ingestion simultanée pour le module Activité (en arrière-plan, non bloquant)
-      ingestFromCSV(fileContent, fileName).catch(error => {
+      ingestActivityFromFile(fileContent, fileName).catch(error => {
         console.warn('Activity ingestion failed (non-blocking):', error);
       });
 
