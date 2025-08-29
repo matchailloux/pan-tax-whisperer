@@ -1,10 +1,12 @@
 import { Button } from '@/components/ui/button';
 import { useActivityIngestion } from '@/hooks/useActivityIngestion';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 
 export default function ActivityTestUpload() {
   const { ingestFromCSV } = useActivityIngestion();
   const [isLoading, setIsLoading] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const handleTestUpload = async () => {
     setIsLoading(true);
@@ -26,17 +28,49 @@ export default function ActivityTestUpload() {
     }
   };
 
+  const handleSelectFile = () => fileInputRef.current?.click();
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      setIsUploading(true);
+      const text = await file.text();
+      await ingestFromCSV(text, file.name);
+      // Reset input to allow re-uploading the same file if needed
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    } catch (err) {
+      console.error('Full CSV upload failed:', err);
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
   return (
-    <div className="mb-4">
-      <Button 
-        onClick={handleTestUpload} 
-        disabled={isLoading}
-        variant="outline"
-      >
-        {isLoading ? 'Test en cours...' : 'Tester ingestion données'}
-      </Button>
-      <p className="text-xs text-muted-foreground mt-1">
-        Ajoute des données de test pour vérifier le module Activité
+    <div className="mb-4 space-y-2">
+      <div className="flex flex-wrap gap-2">
+        <Button 
+          onClick={handleTestUpload} 
+          disabled={isLoading || isUploading}
+          variant="outline"
+        >
+          {isLoading ? 'Test en cours...' : 'Tester ingestion données'}
+        </Button>
+
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".csv,text/csv"
+          className="hidden"
+          onChange={handleFileChange}
+        />
+        <Button onClick={handleSelectFile} disabled={isUploading || isLoading}>
+          {isUploading ? 'Import en cours...' : 'Importer un CSV complet'}
+        </Button>
+      </div>
+      <p className="text-xs text-muted-foreground">
+        Utilisez « Importer un CSV complet » pour prendre en compte toutes vos lignes. Le bouton de test n’ajoute que 5 lignes d’exemple.
       </p>
     </div>
   );
