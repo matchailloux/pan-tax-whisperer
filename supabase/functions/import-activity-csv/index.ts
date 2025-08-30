@@ -96,135 +96,135 @@ export default async function handler(req: Request): Promise<Response> {
 
     // Form-data
     const ct = req.headers.get("content-type")||"";
-    if (!ct.includes("multipart/form-data")) return new Response("Bad Request (multipart required)",{status:400});
+    if (!ct.includes("multipart/form-data")) return new Response("Bad Request (multipart required)",{status:400, headers: corsHeaders});
     const form = await req.formData();
     const file = form.get("file") as File | null;
     let upload_id = (form.get("upload_id") as string) || crypto.randomUUID();
     const client_account_id_raw = form.get("client_account_id") as string | null;
     const client_account_id = client_account_id_raw && client_account_id_raw !== "null" ? client_account_id_raw : null;
 
-    if (!file) return new Response("file required",{status:400});
-    if (file.size > 100 * 1024 * 1024) return new Response("file too large",{status:413});
+    if (!file) return new Response("file required",{status:400, headers: corsHeaders});
+    if (file.size > 100 * 1024 * 1024) return new Response("file too large",{status:413, headers: corsHeaders});
 
-    // Lecture & délimiteur
-    let text = await file.text();
-    text = text.replace(/^\uFEFF/,""); // BOM
-    const delimiter = detectDelimiter(text);
+    // Lancer le traitement en arrière-plan pour nettoyer + ingérer
+    EdgeRuntime.waitUntil((async () => {
+      try {
+        // Lecture & délimiteur
+        let text = await file.text();
+        text = text.replace(/^\uFEFF/,""); // BOM
+        const delimiter = detectDelimiter(text);
 
-    // Parse (auto delimiter)
-    const records = parse(text, { skipFirstRow:false, separator: delimiter }) as string[][];
-    if (!records.length) return new Response("empty csv",{status:400});
-    const rawHeaders = records[0].map(h=>h?.trim());
-    const rows = records.slice(1);
+        // Parse (auto delimiter)
+        const records = parse(text, { skipFirstRow:false, separator: delimiter }) as string[][];
+        if (!records.length) { console.log('empty csv'); return; }
+        const rawHeaders = records[0].map(h=>h?.trim());
+        const rows = records.slice(1);
 
-    // Header mapping
-    const headerMap = {
-      TAXABLE_JURISDICTION: resolveHeader(rawHeaders, ["TAXABLE_JURISDICTION", ...SYNONYMS.TAXABLE_JURISDICTION]),
-      TRANSACTION_CURRENCY_CODE: resolveHeader(rawHeaders, ["TRANSACTION_CURRENCY_CODE", ...SYNONYMS.TRANSACTION_CURRENCY_CODE]),
-      TOTAL_ACTIVITY_VALUE_AMT_VAT_INCL: resolveHeader(rawHeaders, ["TOTAL_ACTIVITY_VALUE_AMT_VAT_INCL", ...SYNONYMS.TOTAL_ACTIVITY_VALUE_AMT_VAT_INCL]),
-      TOTAL_ACTIVITY_VALUE_VAT_AMT: resolveHeader(rawHeaders, ["TOTAL_ACTIVITY_VALUE_VAT_AMT", ...SYNONYMS.TOTAL_ACTIVITY_VALUE_VAT_AMT]),
-      TOTAL_ACTIVITY_VALUE_AMT_VAT_EXCL: resolveHeader(rawHeaders, ["TOTAL_ACTIVITY_VALUE_AMT_VAT_EXCL", ...SYNONYMS.TOTAL_ACTIVITY_VALUE_AMT_VAT_EXCL]),
-      TRANSACTION_DEPART_DATE: resolveHeader(rawHeaders, ["TRANSACTION_DEPART_DATE", ...SYNONYMS.TRANSACTION_DEPART_DATE]),
-      TRANSACTION_TYPE: resolveHeader(rawHeaders, ["TRANSACTION_TYPE", ...SYNONYMS.TRANSACTION_TYPE]),
-    } as const;
+        // Header mapping
+        const headerMap = {
+          TAXABLE_JURISDICTION: resolveHeader(rawHeaders, ["TAXABLE_JURISDICTION", ...SYNONYMS.TAXABLE_JURISDICTION]),
+          TRANSACTION_CURRENCY_CODE: resolveHeader(rawHeaders, ["TRANSACTION_CURRENCY_CODE", ...SYNONYMS.TRANSACTION_CURRENCY_CODE]),
+          TOTAL_ACTIVITY_VALUE_AMT_VAT_INCL: resolveHeader(rawHeaders, ["TOTAL_ACTIVITY_VALUE_AMT_VAT_INCL", ...SYNONYMS.TOTAL_ACTIVITY_VALUE_AMT_VAT_INCL]),
+          TOTAL_ACTIVITY_VALUE_VAT_AMT: resolveHeader(rawHeaders, ["TOTAL_ACTIVITY_VALUE_VAT_AMT", ...SYNONYMS.TOTAL_ACTIVITY_VALUE_VAT_AMT]),
+          TOTAL_ACTIVITY_VALUE_AMT_VAT_EXCL: resolveHeader(rawHeaders, ["TOTAL_ACTIVITY_VALUE_AMT_VAT_EXCL", ...SYNONYMS.TOTAL_ACTIVITY_VALUE_AMT_VAT_EXCL]),
+          TRANSACTION_DEPART_DATE: resolveHeader(rawHeaders, ["TRANSACTION_DEPART_DATE", ...SYNONYMS.TRANSACTION_DEPART_DATE]),
+          TRANSACTION_TYPE: resolveHeader(rawHeaders, ["TRANSACTION_TYPE", ...SYNONYMS.TRANSACTION_TYPE]),
+        } as const;
 
-    const missing = Object.entries(headerMap).filter(([_,v])=>!v).map(([k])=>k);
-    if (missing.length){
-      return new Response(JSON.stringify({ ok:false, error:"missing_columns", details:missing }),
-        { status:422, headers:{ ...corsHeaders, "content-type":"application/json" }});
-    }
+        const missing = Object.entries(headerMap).filter(([_,v])=>!v).map(([k])=>k);
+        if (missing.length){
+          console.warn('missing_columns', missing);
+          return;
+        }
 
-    const idx = new Map(rawHeaders.map((h,i)=>[h!,i]));
-    const val = (row:string[], key:string|null)=> {
-      if (!key) return "";
-      const i = idx.get(key);
-      return i===undefined ? "" : (row[i] ?? "");
-    };
+        const idx = new Map(rawHeaders.map((h,i)=>[h!,i]));
+        const val = (row:string[], key:string|null)=> {
+          if (!key) return "";
+          const i = idx.get(key);
+          return i===undefined ? "" : (row[i] ?? "");
+        };
 
-    // Transformer toutes les lignes mais SANS interrompre au 1er défaut
-    const good: CanonicalRow[] = [];
-    const errors: { line:number; message:string }[] = [];
+        // Transformer toutes les lignes mais SANS interrompre au 1er défaut
+        const good: CanonicalRow[] = [];
+        const errors: { line:number; message:string }[] = [];
 
-    for (let i=0;i<rows.length;i++){
-      const r = rows[i];
-      try{
-        if (!r || r.every(c => (c??"").toString().trim()==="")) continue; // skip vide
+        for (let i=0;i<rows.length;i++){
+          const r = rows[i];
+          try{
+            if (!r || r.every(c => (c??"").toString().trim()==="")) continue; // skip vide
 
-        const country  = normUpper(val(r, headerMap.TAXABLE_JURISDICTION), "UNKNOWN");
-        const currency = normUpper(val(r, headerMap.TRANSACTION_CURRENCY_CODE), "EUR");
-        const gross    = toNumber(val(r, headerMap.TOTAL_ACTIVITY_VALUE_AMT_VAT_INCL));
-        const vat      = toNumber(val(r, headerMap.TOTAL_ACTIVITY_VALUE_VAT_AMT));
-        const net      = toNumber(val(r, headerMap.TOTAL_ACTIVITY_VALUE_AMT_VAT_EXCL));
-        const dateISO  = toISODate(val(r, headerMap.TRANSACTION_DEPART_DATE));
-        const type     = normType(val(r, headerMap.TRANSACTION_TYPE));
+            const country  = normUpper(val(r, headerMap.TAXABLE_JURISDICTION), "UNKNOWN");
+            const currency = normUpper(val(r, headerMap.TRANSACTION_CURRENCY_CODE), "EUR");
+            const gross    = toNumber(val(r, headerMap.TOTAL_ACTIVITY_VALUE_AMT_VAT_INCL));
+            const vat      = toNumber(val(r, headerMap.TOTAL_ACTIVITY_VALUE_VAT_AMT));
+            const net      = toNumber(val(r, headerMap.TOTAL_ACTIVITY_VALUE_AMT_VAT_EXCL));
+            const dateISO  = toISODate(val(r, headerMap.TRANSACTION_DEPART_DATE));
+            const type     = normType(val(r, headerMap.TRANSACTION_TYPE));
 
-        good.push({
-          business_id, client_account_id, upload_id,
-          TAXABLE_JURISDICTION: country,
-          TRANSACTION_CURRENCY_CODE: currency,
-          TOTAL_ACTIVITY_VALUE_AMT_VAT_INCL: Math.abs(gross), // important : absolu (sign géré plus tard)
-          TOTAL_ACTIVITY_VALUE_VAT_AMT: Math.abs(vat),
-          TOTAL_ACTIVITY_VALUE_AMT_VAT_EXCL: Math.abs(net),
-          TRANSACTION_DEPART_DATE: dateISO,
-          TRANSACTION_TYPE: type
-        });
-      } catch(e){
-        errors.push({ line: i+2, message: String(e) }); // +2 = header + base 1
+            good.push({
+              business_id, client_account_id, upload_id,
+              TAXABLE_JURISDICTION: country,
+              TRANSACTION_CURRENCY_CODE: currency,
+              TOTAL_ACTIVITY_VALUE_AMT_VAT_INCL: Math.abs(gross),
+              TOTAL_ACTIVITY_VALUE_VAT_AMT: Math.abs(vat),
+              TOTAL_ACTIVITY_VALUE_AMT_VAT_EXCL: Math.abs(net),
+              TRANSACTION_DEPART_DATE: dateISO,
+              TRANSACTION_TYPE: type
+            });
+          } catch(e){
+            errors.push({ line: i+2, message: String(e) });
+          }
+        }
+
+        if (!good.length){
+          console.warn('no_valid_rows', { upload_id, errors_count: errors.length });
+          return;
+        }
+
+        // Insert en staging via service role (par lots)
+        const admin = createClient(url, service);
+        const chunkSize = 2000;
+        let inserted = 0;
+
+        for (let i=0;i<good.length;i+=chunkSize){
+          const chunk = good.slice(i, i+chunkSize);
+          const payload = chunk.map(c=>({
+            business_id: c.business_id,
+            client_account_id: c.client_account_id,
+            upload_id: c.upload_id,
+            TAXABLE_JURISDICTION: c.TAXABLE_JURISDICTION,
+            TRANSACTION_CURRENCY_CODE: c.TRANSACTION_CURRENCY_CODE,
+            TOTAL_ACTIVITY_VALUE_AMT_VAT_INCL: c.TOTAL_ACTIVITY_VALUE_AMT_VAT_INCL,
+            TOTAL_ACTIVITY_VALUE_VAT_AMT: c.TOTAL_ACTIVITY_VALUE_VAT_AMT,
+            TOTAL_ACTIVITY_VALUE_AMT_VAT_EXCL: c.TOTAL_ACTIVITY_VALUE_AMT_VAT_EXCL,
+            TRANSACTION_DEPART_DATE: c.TRANSACTION_DEPART_DATE,
+            TRANSACTION_TYPE: c.TRANSACTION_TYPE
+          }));
+
+          const { error:insErr } = await admin.from("stg_amz_transactions").insert(payload);
+          if (insErr){
+            console.error('staging_insert_failed', insErr.message);
+          } else {
+            inserted += payload.length;
+          }
+        }
+
+        // Ingestion
+        const { error:rpcErr } = await admin.rpc("ingest_activity_replace", { p_upload_id: upload_id });
+        if (rpcErr){ console.error('ingest_activity_failed', rpcErr.message); }
+
+        const { error:ventesRpcErr } = await admin.rpc("ingest_ventes_replace", { p_upload_id: upload_id });
+        if (ventesRpcErr){ console.error('ingest_ventes_failed', ventesRpcErr.message); }
+
+        console.log('processing_done', { upload_id, inserted, errors: errors.length });
+      } catch (e) {
+        console.error('background_processing_error', e);
       }
-    }
+    })());
 
-    if (!good.length){
-      return new Response(JSON.stringify({ ok:false, error:"no_valid_rows", errors }), {
-        status:422, headers:{ ...corsHeaders, "content-type":"application/json" }
-      });
-    }
-
-    // Insert en staging via service role (par lots)
-    const admin = createClient(url, service);
-    const chunkSize = 2000;
-    let inserted = 0;
-
-    for (let i=0;i<good.length;i+=chunkSize){
-      const chunk = good.slice(i, i+chunkSize);
-      const payload = chunk.map(c=>({
-        business_id: c.business_id,
-        client_account_id: c.client_account_id,
-        upload_id: c.upload_id,
-        TAXABLE_JURISDICTION: c.TAXABLE_JURISDICTION,
-        TRANSACTION_CURRENCY_CODE: c.TRANSACTION_CURRENCY_CODE,
-        TOTAL_ACTIVITY_VALUE_AMT_VAT_INCL: c.TOTAL_ACTIVITY_VALUE_AMT_VAT_INCL,
-        TOTAL_ACTIVITY_VALUE_VAT_AMT: c.TOTAL_ACTIVITY_VALUE_VAT_AMT,
-        TOTAL_ACTIVITY_VALUE_AMT_VAT_EXCL: c.TOTAL_ACTIVITY_VALUE_AMT_VAT_EXCL,
-        TRANSACTION_DEPART_DATE: c.TRANSACTION_DEPART_DATE,
-        TRANSACTION_TYPE: c.TRANSACTION_TYPE
-      }));
-
-      const { error:insErr, count } = await admin.from("stg_amz_transactions").insert(payload, { count:"exact" });
-      if (insErr){
-        // on ne stoppe pas tout : on journalise et continue
-        errors.push({ line: -1, message: `staging_insert_failed: ${insErr.message}` });
-      } else {
-        inserted += count ?? payload.length;
-      }
-    }
-
-    // Lancer l'ingestion (replace pour un état exact)
-    const { error:rpcErr } = await admin.rpc("ingest_activity_replace", { p_upload_id: upload_id });
-    if (rpcErr){
-      return new Response(JSON.stringify({ ok:false, error:"ingest_failed", message: rpcErr.message, inserted, errors }), {
-        status:500, headers:{ ...corsHeaders, "content-type":"application/json" }
-      });
-    }
-
-    // Also ingest into sales events table
-    const { error:ventesRpcErr } = await admin.rpc("ingest_ventes_replace", { p_upload_id: upload_id });
-    if (ventesRpcErr){
-      console.log("Warning: Sales ingestion failed:", ventesRpcErr.message);
-      // Don't fail the request for sales ingestion errors
-    }
-
-    return new Response(JSON.stringify({ ok:true, upload_id, inserted, skipped: errors.length, errors }), {
-      status:200, headers:{ ...corsHeaders, "content-type":"application/json" }
+    // Réponse immédiate
+    return new Response(JSON.stringify({ ok:true, upload_id, accepted:true, received_bytes: file.size }), {
+      status:202, headers:{ ...corsHeaders, "content-type":"application/json" }
     });
 
   }catch(e){

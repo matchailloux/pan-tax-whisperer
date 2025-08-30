@@ -29,19 +29,27 @@ export const useActivityIngestion = () => {
         return false;
       }
 
-      const { data, error } = await supabase.functions.invoke('import-activity-csv', {
+      const resp = await fetch('https://lxulrlyzieqvxrsgfxoj.supabase.co/functions/v1/import-activity-csv', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${accessToken}` },
         body: formData,
       });
 
-      if (error || !data?.ok) {
-        throw new Error(error?.message || JSON.stringify(data));
+      const isAccepted = resp.status === 202;
+      const data = await resp.json().catch(() => ({}));
+
+      if (!resp.ok && !isAccepted) {
+        const txt = typeof data === 'string' ? data : (data?.message || 'Import échoué');
+        console.error('Activity ingestion HTTP error:', txt);
+        throw new Error(txt);
       }
 
-      console.log('Activity ingestion successful:', data);
-      
+      console.log('Activity ingestion response:', data);
       toast({
-        title: "Données d'activité ingérées",
-        description: `${data.inserted ?? 0} lignes traitées (upload ${data.upload_id}).`,
+        title: isAccepted ? 'Ingestion démarrée' : 'Données d’activité ingérées',
+        description: isAccepted
+          ? `Fichier reçu (upload ${data.upload_id || ''}). Traitement en arrière-plan...`
+          : `${data.inserted ?? 0} lignes traitées (upload ${data.upload_id}).`,
       });
 
       // Déclencher un refresh des données d'activité

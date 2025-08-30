@@ -27,18 +27,33 @@ export default function VentesImport() {
       const formData = new FormData();
       formData.append('file', file);
 
-      const { data: result, error: fnError } = await supabase.functions.invoke('import-activity-csv', {
+      const response = await fetch('https://lxulrlyzieqvxrsgfxoj.supabase.co/functions/v1/import-activity-csv', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+        },
         body: formData,
       });
 
-      if (fnError || result?.ok === false) {
-        throw new Error(fnError?.message || result?.message || JSON.stringify(result));
+      const isAccepted = response.status === 202;
+      const result = await response.json().catch(() => ({}));
+
+      if (!response.ok && !isAccepted) {
+        throw new Error(result?.message || 'Import échoué');
       }
 
-      toast({
-        title: "Import réussi",
-        description: `${result.inserted || 0} lignes importées, ${result.skipped || 0} ignorées`,
-      });
+      if (isAccepted) {
+        toast({
+          title: 'Import lancé',
+          description: `Fichier reçu. Upload ${result.upload_id || ''}. Traitement en arrière-plan...`,
+        });
+      } else {
+        toast({
+          title: 'Import réussi',
+          description: `${result.inserted || 0} lignes importées, ${result.skipped || 0} ignorées`,
+        });
+      }
+
 
       // Invalidate all sales queries to refresh data
       queryClient.invalidateQueries({ queryKey: ['ventes_kpis'] });
