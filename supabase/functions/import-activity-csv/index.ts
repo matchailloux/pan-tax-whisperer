@@ -212,7 +212,7 @@ export default async function handler(req: Request): Promise<Response> {
     const { error:rpcErr } = await admin.rpc("ingest_activity_replace", { p_upload_id: upload_id });
     if (rpcErr){
       return new Response(JSON.stringify({ ok:false, error:"ingest_failed", message: rpcErr.message, inserted, errors }), {
-        status:500, headers:{ "content-type":"application/json" }
+        status:500, headers:{ ...corsHeaders, "content-type":"application/json" }
       });
     }
 
@@ -224,12 +224,12 @@ export default async function handler(req: Request): Promise<Response> {
     }
 
     return new Response(JSON.stringify({ ok:true, upload_id, inserted, skipped: errors.length, errors }), {
-      status:200, headers:{ "content-type":"application/json" }
+      status:200, headers:{ ...corsHeaders, "content-type":"application/json" }
     });
 
   }catch(e){
     return new Response(JSON.stringify({ ok:false, error:"server_error", message:String(e) }), {
-      status:500, headers:{ "content-type":"application/json" }
+      status:500, headers:{ ...corsHeaders, "content-type":"application/json" }
     });
   }
 }
