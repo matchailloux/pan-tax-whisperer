@@ -12,7 +12,8 @@ import {
   Settings,
   HelpCircle,
   LogOut,
-  Bell
+  Bell,
+  ShoppingCart
 } from 'lucide-react';
 import {
   Sidebar,
@@ -53,6 +54,11 @@ const individualMenuItems = [
     title: "Activité",
     url: "/dashboard/activity",
     icon: Activity,
+  },
+  {
+    title: "Ventes",
+    url: "/dashboard/ventes",
+    icon: ShoppingCart,
   },
   {
     title: "Données",

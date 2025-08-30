@@ -207,6 +207,13 @@ export default async function handler(req: Request): Promise<Response> {
       });
     }
 
+    // Also ingest into sales events table
+    const { error:ventesRpcErr } = await admin.rpc("ingest_ventes_replace", { p_upload_id: upload_id });
+    if (ventesRpcErr){
+      console.log("Warning: Sales ingestion failed:", ventesRpcErr.message);
+      // Don't fail the request for sales ingestion errors
+    }
+
     return new Response(JSON.stringify({ ok:true, upload_id, inserted, skipped: errors.length, errors }), {
       status:200, headers:{ "content-type":"application/json" }
     });

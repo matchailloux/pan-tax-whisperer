@@ -18,6 +18,7 @@ import FirmReports from '@/pages/dashboard/FirmReports';
 import FirmActivity from '@/pages/dashboard/FirmActivity';
 import FirmSettings from '@/pages/dashboard/FirmSettings';
 import FirmHelp from '@/pages/dashboard/FirmHelp';
+import VentesPage from '@/pages/ventes/VentesPage';
 import { LoadingSpinner } from '@/components/LoadingSpinner';
 
 const DashboardRoutes = () => {
@@ -59,6 +60,7 @@ const DashboardRoutes = () => {
         <Route path="documents" element={<DocumentsPage />} />
         <Route path="reports" element={<ReportsPage />} />
         <Route path="activity" element={<ActivityPage />} />
+        <Route path="ventes" element={<VentesPage />} />
         <Route path="data" element={<DataPage />} />
         <Route path="settings" element={<SettingsPage />} />
         <Route path="help" element={<HelpPage />} />
