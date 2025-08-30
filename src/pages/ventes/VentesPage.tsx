@@ -43,18 +43,6 @@ export default function VentesPage() {
   const { data: tsTax = [] } = useVentesTimeseries(filters, 'tax');
   const { data: typeBreakdown = [] } = useVentesTypeBreakdown(filters);
 
-  // Redirect to dashboard if not individual account
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <LoadingSpinner />
-      </div>
-    );
-  }
-
-  if (!organization || organization.type !== 'INDIVIDUAL') {
-    return <Navigate to="/dashboard" replace />;
-  }
 
   const timeSeriesData = useMemo(() => {
     const dataMap: Record<string, { period: string; gross: number; tax: number }> = {};
@@ -80,52 +68,62 @@ export default function VentesPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Ventes</h1>
-          <p className="text-muted-foreground">
-            Analysez vos ventes Amazon par pays et taux de TVA
-          </p>
+      {loading ? (
+        <div className="min-h-screen flex items-center justify-center">
+          <LoadingSpinner />
         </div>
-      </div>
+      ) : (!organization || organization.type !== 'INDIVIDUAL') ? (
+        <Navigate to="/dashboard" replace />
+      ) : (
+        <>
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-3xl font-bold tracking-tight">Ventes</h1>
+              <p className="text-muted-foreground">
+                Analysez vos ventes Amazon par pays et taux de TVA
+              </p>
+            </div>
+          </div>
 
-      <VentesFilters initial={filters} onChange={(f)=>setFilters(f)} />
+          <VentesFilters initial={filters} onChange={(f)=>setFilters(f)} />
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2">
-          <VentesKpis k={kpis} />
-        </div>
-        <VentesImport />
-      </div>
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="lg:col-span-2">
+              <VentesKpis k={kpis} />
+            </div>
+            <VentesImport />
+          </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <VentesTimeSeries data={timeSeriesData} />
-        <VentesByCountry 
-          data={byCountry.map((item: any) => ({
-            country: item.country,
-            gross_ttc: Number(item.gross_ttc || 0)
-          }))}
-        />
-      </div>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <VentesTimeSeries data={timeSeriesData} />
+            <VentesByCountry 
+              data={byCountry.map((item: any) => ({
+                country: item.country,
+                gross_ttc: Number(item.gross_ttc || 0)
+              }))}
+            />
+          </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <VentesByType 
-          data={typeBreakdown.map((item: any) => ({
-            type: item.type,
-            gross_ttc: Number(item.gross_ttc || 0)
-          }))}
-        />
-        <VentesExportPanel 
-          byCountry={byCountry}
-          byCountryRate={byCountryRate}
-          ts={timeSeriesData}
-        />
-      </div>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <VentesByType 
+              data={typeBreakdown.map((item: any) => ({
+                type: item.type,
+                gross_ttc: Number(item.gross_ttc || 0)
+              }))}
+            />
+            <VentesExportPanel 
+              byCountry={byCountry}
+              byCountryRate={byCountryRate}
+              ts={timeSeriesData}
+            />
+          </div>
 
-      <div className="space-y-6">
-        <VentesCountryTotalsTable rows={byCountry} />
-        <VentesCountryVatRateTable rows={byCountryRate} />
-      </div>
+          <div className="space-y-6">
+            <VentesCountryTotalsTable rows={byCountry} />
+            <VentesCountryVatRateTable rows={byCountryRate} />
+          </div>
+        </>
+      )}
     </div>
   );
 }
