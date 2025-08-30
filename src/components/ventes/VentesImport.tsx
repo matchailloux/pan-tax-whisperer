@@ -7,6 +7,97 @@ import { Upload, FileSpreadsheet } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx4dWxybHl6aWVxdnhyc2dmeG9qIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTU2ODUxMjUsImV4cCI6MjA3MTI2MTEyNX0.pGakaRoFTQJIzwD671BgQPS2xTL3qr2tYHbfljAUztc";
+const normTok = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
+const detectDelimiter = (sample: string) => {
+  const counts = {
+    comma: (sample.match(/,/g) || []).length,
+    semicolon: (sample.match(/;/g) || []).length,
+    tab: (sample.match(/\t/g) || []).length,
+  };
+  if (counts.semicolon > counts.comma && counts.semicolon >= counts.tab) return ";";
+  if (counts.tab >= counts.comma && counts.tab >= counts.semicolon) return "\t";
+  return ",";
+};
+const resolveHeader = (headers: string[], candidates: readonly string[]) => {
+  const map = new Map(headers.map((h) => [normTok(h), h]));
+  for (const c of candidates) {
+    const k = normTok(c);
+    if (map.has(k)) return map.get(k)!;
+  }
+  for (const h of headers) {
+    const t = normTok(h);
+    if (candidates.some((c) => t.includes(normTok(c)))) return h;
+  }
+  return null;
+};
+const REQUIRED = {
+  TAXABLE_JURISDICTION: [
+    "TAXABLE_JURISDICTION",
+    "taxable_jurisdiction",
+    "juridiction",
+    "jurisdiction",
+    "country",
+    "pays",
+    "tax_jurisdiction",
+    "destination_country",
+    "ship_country",
+  ],
+  TRANSACTION_DEPART_DATE: [
+    "TRANSACTION_DEPART_DATE",
+    "transaction_depart_date",
+    "date",
+    "transaction_date",
+    "order_date",
+    "purchase_date",
+    "event_date",
+    "date_operation",
+    "activity_period",
+  ],
+  TRANSACTION_CURRENCY_CODE: [
+    "TRANSACTION_CURRENCY_CODE",
+    "currency",
+    "devise",
+    "curr",
+    "currency_code",
+  ],
+  TOTAL_ACTIVITY_VALUE_AMT_VAT_INCL: [
+    "TOTAL_ACTIVITY_VALUE_AMT_VAT_INCL",
+    "ttc",
+    "gross",
+    "amount_gross",
+    "total_gross",
+    "price_gross",
+    "montant_ttc",
+  ],
+  TOTAL_ACTIVITY_VALUE_VAT_AMT: [
+    "TOTAL_ACTIVITY_VALUE_VAT_AMT",
+    "vat",
+    "tax",
+    "amount_vat",
+    "vat_amount",
+    "tax_amount",
+    "montant_tva",
+    "tva",
+  ],
+  TOTAL_ACTIVITY_VALUE_AMT_VAT_EXCL: [
+    "TOTAL_ACTIVITY_VALUE_AMT_VAT_EXCL",
+    "ht",
+    "net",
+    "amount_net",
+    "price_net",
+    "montant_ht",
+  ],
+  TRANSACTION_TYPE: [
+    "TRANSACTION_TYPE",
+    "type",
+    "operation",
+    "event_type",
+    "order_type",
+    "sales_or_refund",
+  ],
+} as const;
+
 export default function VentesImport() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -24,13 +115,37 @@ export default function VentesImport() {
         throw new Error('Not authenticated');
       }
 
+      // Client-side preflight: strip BOM and validate essential columns
+      const originalText = await file.text();
+      const cleanedText = originalText.replace(/^\uFEFF/, '');
+      const firstLine = cleanedText.split(/\r?\n/)[0] || '';
+      const delimiter = detectDelimiter(firstLine);
+      const headers = firstLine.split(delimiter).map(h => h?.trim() || '');
+
+      const headerMap = {
+        TAXABLE_JURISDICTION: resolveHeader(headers, REQUIRED.TAXABLE_JURISDICTION),
+        TRANSACTION_DEPART_DATE: resolveHeader(headers, REQUIRED.TRANSACTION_DEPART_DATE),
+        TRANSACTION_CURRENCY_CODE: resolveHeader(headers, REQUIRED.TRANSACTION_CURRENCY_CODE),
+        TOTAL_ACTIVITY_VALUE_AMT_VAT_INCL: resolveHeader(headers, REQUIRED.TOTAL_ACTIVITY_VALUE_AMT_VAT_INCL),
+        TOTAL_ACTIVITY_VALUE_VAT_AMT: resolveHeader(headers, REQUIRED.TOTAL_ACTIVITY_VALUE_VAT_AMT),
+        TOTAL_ACTIVITY_VALUE_AMT_VAT_EXCL: resolveHeader(headers, REQUIRED.TOTAL_ACTIVITY_VALUE_AMT_VAT_EXCL),
+        TRANSACTION_TYPE: resolveHeader(headers, REQUIRED.TRANSACTION_TYPE),
+      } as const;
+
+      if (!headerMap.TAXABLE_JURISDICTION || !headerMap.TRANSACTION_DEPART_DATE) {
+        throw new Error('Colonnes manquantes: pays ou date introuvables');
+      }
+
+      // Prepare multipart with cleaned CSV to reduce server parsing issues
       const formData = new FormData();
-      formData.append('file', file);
+      formData.append('file', new Blob([cleanedText], { type: 'text/csv' }), file.name);
+      formData.append('upload_id', crypto.randomUUID());
 
       const response = await fetch('https://lxulrlyzieqvxrsgfxoj.supabase.co/functions/v1/import-activity-csv', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${session.access_token}`,
+          'apikey': SUPABASE_ANON_KEY,
         },
         body: formData,
       });

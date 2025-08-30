@@ -16,10 +16,12 @@ export const useActivityIngestion = () => {
     try {
       console.log('Starting activity ingestion for:', fileName);
 
-      // Créer un blob CSV pour l'envoi
-      const csvBlob = new Blob([csvContent], { type: 'text/csv' });
+      // Nettoyage côté client (BOM) pour réduire les erreurs de parsing
+      const cleanedText = csvContent.replace(/^\uFEFF/, '');
+      const csvBlob = new Blob([cleanedText], { type: 'text/csv' });
       const formData = new FormData();
       formData.append('file', csvBlob, fileName);
+      formData.append('upload_id', crypto.randomUUID());
 
       // Récupérer le JWT pour appeler l'Edge Function en multipart
       const { data: sessionData } = await supabase.auth.getSession();
@@ -31,7 +33,10 @@ export const useActivityIngestion = () => {
 
       const resp = await fetch('https://lxulrlyzieqvxrsgfxoj.supabase.co/functions/v1/import-activity-csv', {
         method: 'POST',
-        headers: { Authorization: `Bearer ${accessToken}` },
+        headers: { 
+          Authorization: `Bearer ${accessToken}`,
+          apikey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx4dWxybHl6aWVxdnhyc2dmeG9qIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTU2ODUxMjUsImV4cCI6MjA3MTI2MTEyNX0.pGakaRoFTQJIzwD671BgQPS2xTL3qr2tYHbfljAUztc',
+        },
         body: formData,
       });
 
