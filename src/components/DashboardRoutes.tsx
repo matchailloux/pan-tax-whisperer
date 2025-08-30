@@ -9,7 +9,9 @@ import DocumentsPage from '@/pages/dashboard/DocumentsPage';
 import ReportsPage from '@/pages/dashboard/ReportsPage';
 import ActivityPage from '@/pages/dashboard/ActivityPage';
 import DataPage from '@/pages/dashboard/DataPage';
+import SettingsLayout from '@/pages/dashboard/settings/SettingsLayout';
 import SettingsPage from '@/pages/dashboard/SettingsPage';
+import JurisdictionsPage from '@/pages/dashboard/settings/JurisdictionsPage';
 import HelpPage from '@/pages/dashboard/HelpPage';
 import FirmDashboard from '@/pages/dashboard/FirmDashboard';
 import FirmClients from '@/pages/dashboard/FirmClients';
@@ -62,7 +64,10 @@ const DashboardRoutes = () => {
         <Route path="activity" element={<ActivityPage />} />
         
         <Route path="data" element={<DataPage />} />
-        <Route path="settings" element={<SettingsPage />} />
+        <Route path="settings/*" element={<SettingsLayout />}>
+          <Route index element={<SettingsPage />} />
+          <Route path="jurisdictions" element={<JurisdictionsPage />} />
+        </Route>
         <Route path="help" element={<HelpPage />} />
       </Route>
     </Routes>
