@@ -2,7 +2,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { parse } from "https://deno.land/std@0.224.0/csv/parse.ts";
 
 type CanonicalRow = {
-  organization_id: string;
+  business_id: string;
   client_account_id: string | null;
   upload_id: string;
   TAXABLE_JURISDICTION: string;
@@ -20,7 +20,7 @@ const SYNONYMS: Record<string, string[]> = {
   TOTAL_ACTIVITY_VALUE_AMT_VAT_INCL: ["total_activity_value_amt_vat_incl","ttc","gross","amount_gross","total_gross","price_gross","montant_ttc"],
   TOTAL_ACTIVITY_VALUE_VAT_AMT: ["total_activity_value_vat_amt","vat","tax","amount_vat","vat_amount","tax_amount","montant_tva","tva"],
   TOTAL_ACTIVITY_VALUE_AMT_VAT_EXCL: ["total_activity_value_amt_vat_excl","ht","net","amount_net","price_net","montant_ht"],
-  TRANSACTION_DEPART_DATE: ["transaction_depart_date","date","transaction_date","order_date","purchase_date","event_date","date_operation"],
+  TRANSACTION_DEPART_DATE: ["transaction_depart_date","date","transaction_date","order_date","purchase_date","event_date","date_operation","activity_period"],
   TRANSACTION_TYPE: ["transaction_type","type","operation","event_type","order_type","sales_or_refund"]
 };
 
@@ -71,19 +71,28 @@ function detectDelimiter(sample:string){
 }
 
 export default async function handler(req: Request): Promise<Response> {
+  const corsHeaders = {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  } as const;
+
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { headers: corsHeaders });
+  }
+
   try{
     // Auth
     const jwt = req.headers.get("Authorization")?.replace("Bearer ","");
-    if (!jwt) return new Response("Unauthorized",{status:401});
+    if (!jwt) return new Response("Unauthorized",{status:401, headers: corsHeaders});
     const url=Deno.env.get("SUPABASE_URL")!;
     const anon=Deno.env.get("SUPABASE_ANON_KEY")!;
     const service=Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supa = createClient(url, anon, { global:{ headers:{ Authorization:`Bearer ${jwt}` } } });
 
     // Organisation
-    const { data:orgs, error:orgErr } = await supa.from("memberships").select("organization_id").limit(1);
-    if (orgErr || !orgs?.length) return new Response("Forbidden",{status:403});
-    const organization_id = orgs[0].organization_id as string;
+    const { data:orgs, error:orgErr } = await supa.from("memberships").select("business_id").limit(1);
+    if (orgErr || !orgs?.length) return new Response("Forbidden",{status:403, headers: corsHeaders});
+    const business_id = orgs[0].business_id as string;
 
     // Form-data
     const ct = req.headers.get("content-type")||"";
@@ -122,7 +131,7 @@ export default async function handler(req: Request): Promise<Response> {
     const missing = Object.entries(headerMap).filter(([_,v])=>!v).map(([k])=>k);
     if (missing.length){
       return new Response(JSON.stringify({ ok:false, error:"missing_columns", details:missing }),
-        { status:422, headers:{ "content-type":"application/json" }});
+        { status:422, headers:{ ...corsHeaders, "content-type":"application/json" }});
     }
 
     const idx = new Map(rawHeaders.map((h,i)=>[h!,i]));
@@ -150,7 +159,7 @@ export default async function handler(req: Request): Promise<Response> {
         const type     = normType(val(r, headerMap.TRANSACTION_TYPE));
 
         good.push({
-          organization_id, client_account_id, upload_id,
+          business_id, client_account_id, upload_id,
           TAXABLE_JURISDICTION: country,
           TRANSACTION_CURRENCY_CODE: currency,
           TOTAL_ACTIVITY_VALUE_AMT_VAT_INCL: Math.abs(gross), // important : absolu (sign géré plus tard)
@@ -166,7 +175,7 @@ export default async function handler(req: Request): Promise<Response> {
 
     if (!good.length){
       return new Response(JSON.stringify({ ok:false, error:"no_valid_rows", errors }), {
-        status:422, headers:{ "content-type":"application/json" }
+        status:422, headers:{ ...corsHeaders, "content-type":"application/json" }
       });
     }
 
@@ -178,7 +187,7 @@ export default async function handler(req: Request): Promise<Response> {
     for (let i=0;i<good.length;i+=chunkSize){
       const chunk = good.slice(i, i+chunkSize);
       const payload = chunk.map(c=>({
-        organization_id: c.organization_id,
+        business_id: c.business_id,
         client_account_id: c.client_account_id,
         upload_id: c.upload_id,
         TAXABLE_JURISDICTION: c.TAXABLE_JURISDICTION,
