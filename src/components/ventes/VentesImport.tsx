@@ -27,18 +27,12 @@ export default function VentesImport() {
       const formData = new FormData();
       formData.append('file', file);
 
-      const response = await fetch('https://lxulrlyzieqvxrsgfxoj.supabase.co/functions/v1/import-activity-csv', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${session.access_token}`,
-        },
+      const { data: result, error: fnError } = await supabase.functions.invoke('import-activity-csv', {
         body: formData,
       });
 
-      const result = await response.json();
-
-      if (!response.ok || result?.ok === false) {
-        throw new Error(result?.message || JSON.stringify(result));
+      if (fnError || result?.ok === false) {
+        throw new Error(fnError?.message || result?.message || JSON.stringify(result));
       }
 
       toast({

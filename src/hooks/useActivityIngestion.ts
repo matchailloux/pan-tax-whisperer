@@ -29,19 +29,14 @@ export const useActivityIngestion = () => {
         return false;
       }
 
-      const resp = await fetch('https://lxulrlyzieqvxrsgfxoj.supabase.co/functions/v1/import-activity-csv', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${accessToken}` },
+      const { data, error } = await supabase.functions.invoke('import-activity-csv', {
         body: formData,
       });
 
-      if (!resp.ok) {
-        const txt = await resp.text();
-        console.error('Activity ingestion HTTP error:', txt);
-        throw new Error(txt);
+      if (error || !data?.ok) {
+        throw new Error(error?.message || JSON.stringify(data));
       }
 
-      const data = await resp.json();
       console.log('Activity ingestion successful:', data);
       
       toast({
