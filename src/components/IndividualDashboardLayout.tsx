@@ -13,6 +13,7 @@ import {
   HelpCircle,
   LogOut,
   Bell,
+  Scale
   
 } from 'lucide-react';
 import {
@@ -54,6 +55,11 @@ const individualMenuItems = [
     title: "Activité",
     url: "/dashboard/activity",
     icon: Activity,
+  },
+  {
+    title: "Compliance",
+    url: "/dashboard/compliance",
+    icon: Scale,
   },
   {
     title: "Données",
