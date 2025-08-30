@@ -1697,6 +1697,7 @@ export type Database = {
           client_account_id: string | null
           created_at: string | null
           id: string
+          price_of_items_vat_rate_percent: number | null
           taxable_jurisdiction: string | null
           total_activity_value_amt_vat_excl: number | null
           total_activity_value_amt_vat_incl: number | null
@@ -1711,6 +1712,7 @@ export type Database = {
           client_account_id?: string | null
           created_at?: string | null
           id?: string
+          price_of_items_vat_rate_percent?: number | null
           taxable_jurisdiction?: string | null
           total_activity_value_amt_vat_excl?: number | null
           total_activity_value_amt_vat_incl?: number | null
@@ -1725,6 +1727,7 @@ export type Database = {
           client_account_id?: string | null
           created_at?: string | null
           id?: string
+          price_of_items_vat_rate_percent?: number | null
           taxable_jurisdiction?: string | null
           total_activity_value_amt_vat_excl?: number | null
           total_activity_value_amt_vat_incl?: number | null
@@ -2332,6 +2335,60 @@ export type Database = {
         }
         Relationships: []
       }
+      ventes_events_v1: {
+        Row: {
+          amount_gross: number
+          amount_net: number
+          amount_tax: number
+          client_account_id: string | null
+          country: string
+          created_at: string
+          currency: string
+          event_date: string
+          event_ts: string
+          id: string
+          organization_id: string
+          sign: number
+          type: string
+          upload_id: string
+          vat_rate_pct: number
+        }
+        Insert: {
+          amount_gross: number
+          amount_net: number
+          amount_tax: number
+          client_account_id?: string | null
+          country: string
+          created_at?: string
+          currency: string
+          event_date: string
+          event_ts: string
+          id?: string
+          organization_id: string
+          sign: number
+          type: string
+          upload_id: string
+          vat_rate_pct: number
+        }
+        Update: {
+          amount_gross?: number
+          amount_net?: number
+          amount_tax?: number
+          client_account_id?: string | null
+          country?: string
+          created_at?: string
+          currency?: string
+          event_date?: string
+          event_ts?: string
+          id?: string
+          organization_id?: string
+          sign?: number
+          type?: string
+          upload_id?: string
+          vat_rate_pct?: number
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
@@ -2428,6 +2485,10 @@ export type Database = {
         Args: { p_upload_id: string }
         Returns: undefined
       }
+      ingest_ventes_replace: {
+        Args: { p_upload_id: string }
+        Returns: undefined
+      }
       is_feature_enabled: {
         Args: {
           p_business_id?: string
@@ -2444,6 +2505,95 @@ export type Database = {
       norm_country: {
         Args: { raw: string }
         Returns: string
+      }
+      ventes_breakdown_type: {
+        Args: {
+          p_currency?: string
+          p_from: string
+          p_include_negatives?: boolean
+          p_to: string
+        }
+        Returns: {
+          count: number
+          gross_ttc: number
+          net_ht: number
+          tax_tva: number
+          type: string
+        }[]
+      }
+      ventes_country_totals: {
+        Args: {
+          p_currency?: string
+          p_from: string
+          p_include_negatives?: boolean
+          p_to: string
+          p_type?: string
+        }
+        Returns: {
+          country: string
+          currency: string
+          gross_ttc: number
+          net_ht: number
+          refund_count: number
+          return_count: number
+          sales_count: number
+          tax_tva: number
+        }[]
+      }
+      ventes_country_vat_rate_totals: {
+        Args: {
+          p_currency?: string
+          p_from: string
+          p_include_negatives?: boolean
+          p_to: string
+          p_type?: string
+        }
+        Returns: {
+          country: string
+          currency: string
+          gross_ttc: number
+          net_ht: number
+          refund_count: number
+          return_count: number
+          sales_count: number
+          tax_tva: number
+          vat_rate_pct: number
+        }[]
+      }
+      ventes_kpis: {
+        Args: {
+          p_country?: string
+          p_currency?: string
+          p_from: string
+          p_include_negatives?: boolean
+          p_to: string
+          p_type?: string
+        }
+        Returns: {
+          currency: string
+          gross_ttc: number
+          net_ht: number
+          refund_count: number
+          return_count: number
+          sales_count: number
+          tax_tva: number
+          transactions_total: number
+        }[]
+      }
+      ventes_timeseries: {
+        Args: {
+          p_currency?: string
+          p_from: string
+          p_include_negatives?: boolean
+          p_interval: string
+          p_metric: string
+          p_to: string
+          p_type?: string
+        }
+        Returns: {
+          period: string
+          value: number
+        }[]
       }
     }
     Enums: {
