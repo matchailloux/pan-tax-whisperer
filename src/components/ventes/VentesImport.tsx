@@ -141,7 +141,7 @@ export default function VentesImport() {
       formData.append('file', new Blob([cleanedText], { type: 'text/csv' }), file.name);
       formData.append('upload_id', crypto.randomUUID());
 
-      const response = await fetch('https://lxulrlyzieqvxrsgfxoj.supabase.co/functions/v1/import-activity-csv', {
+      const response = await fetch('https://lxulrlyzieqvxrsgfxoj.supabase.co/functions/v1/import-ventes-csv', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${session.access_token}`,
