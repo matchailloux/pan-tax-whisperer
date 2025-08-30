@@ -48,8 +48,7 @@ const DashboardHome = () => {
       </div>
 
       {/* KPI Cards */}
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-6">
-        {/* Existing KPI Cards */}
+      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
         <Card className="border-l-4 border-l-accent bg-gradient-to-r from-accent/5 to-transparent">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">
@@ -106,37 +105,6 @@ const DashboardHome = () => {
             <div className="text-2xl font-bold">{stats.analysesThisMonth}</div>
             <p className="text-xs text-muted-foreground">
               {formatGrowth(stats.analysesGrowth)} par rapport au mois dernier
-            </p>
-          </CardContent>
-        </Card>
-
-        {/* Compliance KPI Cards */}
-        <Card className="border-l-4 border-l-primary bg-gradient-to-r from-primary/5 to-transparent">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
-              TVA due ce mois
-            </CardTitle>
-            <TrendingUp className="h-4 w-4 text-primary" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">€31,003</div>
-            <p className="text-xs text-muted-foreground">
-              Toutes juridictions
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card className="border-l-4 border-l-secondary bg-gradient-to-r from-secondary/5 to-transparent">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
-              Juridictions actives
-            </CardTitle>
-            <Activity className="h-4 w-4 text-secondary" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">4</div>
-            <p className="text-xs text-muted-foreground">
-              3 conformes, 1 alerte
             </p>
           </CardContent>
         </Card>
@@ -228,6 +196,71 @@ const DashboardHome = () => {
         </Card>
       </div>
 
+      {/* Compliance KPI Cards */}
+      <div>
+        <h3 className="text-lg font-semibold mb-4">Compliance TVA</h3>
+        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+          <Card className="border-l-4 border-l-primary bg-gradient-to-r from-primary/5 to-transparent">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">
+                TVA due ce mois
+              </CardTitle>
+              <TrendingUp className="h-4 w-4 text-primary" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">€31,003</div>
+              <p className="text-xs text-muted-foreground">
+                Toutes juridictions
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card className="border-l-4 border-l-secondary bg-gradient-to-r from-secondary/5 to-transparent">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">
+                TVA OSS
+              </CardTitle>
+              <Activity className="h-4 w-4 text-secondary" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">€12,801</div>
+              <p className="text-xs text-muted-foreground">
+                Régime OSS/IOSS
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card className="border-l-4 border-l-accent bg-gradient-to-r from-accent/5 to-transparent">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">
+                Juridictions
+              </CardTitle>
+              <Settings className="h-4 w-4 text-accent" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">4</div>
+              <p className="text-xs text-muted-foreground">
+                3 conformes, 1 alerte
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card className="border-l-4 border-l-warning bg-gradient-to-r from-warning/5 to-transparent">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">
+                Prochaine échéance
+              </CardTitle>
+              <Clock className="h-4 w-4 text-warning" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">10 Jan</div>
+              <p className="text-xs text-muted-foreground">
+                Allemagne - TVA
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
       {/* Getting Started Section */}
       <Card>
         <CardHeader>
