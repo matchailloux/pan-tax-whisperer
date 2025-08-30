@@ -35,6 +35,14 @@ export default function VentesPage() {
     interval: 'month'
   });
 
+  // Data queries (hooks must be called unconditionally)
+  const { data: kpis } = useVentesKpis(filters);
+  const { data: byCountry = [] } = useVentesCountryTotals(filters);
+  const { data: byCountryRate = [] } = useVentesCountryVatRateTotals(filters);
+  const { data: tsGross = [] } = useVentesTimeseries(filters, 'gross');
+  const { data: tsTax = [] } = useVentesTimeseries(filters, 'tax');
+  const { data: typeBreakdown = [] } = useVentesTypeBreakdown(filters);
+
   // Redirect to dashboard if not individual account
   if (loading) {
     return (
@@ -47,13 +55,6 @@ export default function VentesPage() {
   if (!organization || organization.type !== 'INDIVIDUAL') {
     return <Navigate to="/dashboard" replace />;
   }
-
-  const { data: kpis } = useVentesKpis(filters);
-  const { data: byCountry = [] } = useVentesCountryTotals(filters);
-  const { data: byCountryRate = [] } = useVentesCountryVatRateTotals(filters);
-  const { data: tsGross = [] } = useVentesTimeseries(filters, 'gross');
-  const { data: tsTax = [] } = useVentesTimeseries(filters, 'tax');
-  const { data: typeBreakdown = [] } = useVentesTypeBreakdown(filters);
 
   const timeSeriesData = useMemo(() => {
     const dataMap: Record<string, { period: string; gross: number; tax: number }> = {};
@@ -88,7 +89,7 @@ export default function VentesPage() {
         </div>
       </div>
 
-      <VentesFilters initial={filters} onChange={setFilters} />
+      <VentesFilters initial={filters} onChange={(f)=>setFilters(f)} />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2">
