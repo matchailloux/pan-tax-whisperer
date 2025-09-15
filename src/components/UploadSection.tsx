@@ -145,7 +145,7 @@ const UploadSection = () => {
           }
           toast({
             title: "Aucune transaction reconnue",
-            description: "Impossible d'identifier SALE/REFUND. Vérifiez les colonnes TYPE/EVENT de votre CSV Amazon.",
+            description: "Impossible d'identifier des opérations SALE/REFUND. Vérifiez la colonne TRANSACTION_TYPE (valeurs SALE ou REFUND).",
             variant: "destructive",
           });
         }
