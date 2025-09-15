@@ -207,10 +207,10 @@ function preprocessYAML(rawTransactions: any[]): ProcessedTransaction[] {
     }
     return def;
   };
-  const txTypeKeys = ['TRANSACTION_TYPE','TRANSACTIONTYPE','TX_TYPE','TYPE','TRANSACTION','TYPE_TRANSACTION'];
+  const txTypeKeys = ['TRANSACTION_TYPE','TRANSACTIONTYPE','TRANSACTION_EVENT_TYPE','TX_TYPE','TYPE','TRANSACTION','TYPE_TRANSACTION'];
   const schemeKeys = ['TAX_REPORTING_SCHEME','TAX_REPORTING','REPORTING_SCHEME','VAT_REPORTING_SCHEME','SCHEME'];
   const arrivalKeys = ['SALE_ARRIVAL_COUNTRY','ARRIVAL_COUNTRY','ARRIVAL','SHIP_TO_COUNTRY','SHIP_TO','DESTINATION_COUNTRY'];
-  const departKeys = ['SALE_DEPART_COUNTRY','DEPART_COUNTRY','DEPART','SHIP_FROM_COUNTRY','SHIP_FROM','ORIGIN_COUNTRY'];
+  const departKeys = ['SALE_DEPART_COUNTRY','SALE_DEPARTURE_COUNTRY','DEPARTURE_COUNTRY','DEPART_COUNTRY','DEPART','SHIP_FROM_COUNTRY','SHIP_FROM','ORIGIN_COUNTRY'];
   const buyerVatKeys = ['BUYER_VAT_NUMBER_COUNTRY','BUYER_VAT_COUNTRY','BUYER_VAT','VAT_NUMBER_COUNTRY','VAT_BUYER_COUNTRY','BUYER_VAT_NUMBER_PREFIX'];
   const amountKeys = ['TOTAL_ACTIVITY_VALUE_AMT_VAT_EXCL','TOTAL_ACTIVITY_VALUE_VAT_EXCL','TOTAL_ACTIVITY_VALUE','TOTAL_VAT_EXCL','AMOUNT_VAT_EXCL','AMOUNT','NET_AMOUNT','ITEM_PRICE_EXCL_VAT','TRANSACTION_AMOUNT'];
 
@@ -295,12 +295,12 @@ function preprocessYAML(rawTransactions: any[]): ProcessedTransaction[] {
     filtered.slice(0, 3).forEach((t, i) => {
       console.log(`  ${i+1}. TX_TYPE: ${t.TX_TYPE}, SCHEME: ${t.SCHEME}, DEPART: ${t.DEPART}, ARRIVAL: ${t.ARRIVAL}, AMOUNT: ${t.AMOUNT_SIGNED}`);
     });
+    return filtered;
   } else {
     console.log('❌ AUCUNE transaction après filtrage SALE/REFUND !');
-    console.log('🔍 Problème possible: Les valeurs TX_TYPE ne sont pas reconnues comme SALE/REFUND');
+    console.log('🔁 Fallback: utilisation de TOUTES les transactions mappées (sans filtrage TX_TYPE).');
+    return mapped;
   }
-  
-  return filtered;
 }
 
 /**
