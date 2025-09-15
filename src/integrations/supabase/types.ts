@@ -1015,6 +1015,45 @@ export type Database = {
           },
         ]
       }
+      jurisdictions: {
+        Row: {
+          created_at: string
+          id: string
+          jurisdiction: string
+          permanent_establishment: boolean
+          registered_in_import_scheme: boolean
+          tax_id: string
+          updated_at: string
+          user_id: string
+          valid_from: string
+          valid_until: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          jurisdiction: string
+          permanent_establishment?: boolean
+          registered_in_import_scheme?: boolean
+          tax_id: string
+          updated_at?: string
+          user_id: string
+          valid_from: string
+          valid_until?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          jurisdiction?: string
+          permanent_establishment?: boolean
+          registered_in_import_scheme?: boolean
+          tax_id?: string
+          updated_at?: string
+          user_id?: string
+          valid_from?: string
+          valid_until?: string | null
+        }
+        Relationships: []
+      }
       locations: {
         Row: {
           address: string | null
@@ -1410,6 +1449,107 @@ export type Database = {
           first_name?: string | null
           id?: string
           last_name?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      recipe_ingredients: {
+        Row: {
+          cost: number | null
+          created_at: string
+          id: string
+          name: string
+          quantity: number
+          recipe_id: string
+          unit: string
+        }
+        Insert: {
+          cost?: number | null
+          created_at?: string
+          id?: string
+          name: string
+          quantity: number
+          recipe_id: string
+          unit: string
+        }
+        Update: {
+          cost?: number | null
+          created_at?: string
+          id?: string
+          name?: string
+          quantity?: number
+          recipe_id?: string
+          unit?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "recipe_ingredients_recipe_id_fkey"
+            columns: ["recipe_id"]
+            isOneToOne: false
+            referencedRelation: "recipes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      recipes: {
+        Row: {
+          allergens: string[] | null
+          business_id: string | null
+          category: string | null
+          cook_time_minutes: number | null
+          cost_per_serving: number | null
+          created_at: string
+          description: string | null
+          id: string
+          instructions: string | null
+          margin_percentage: number | null
+          name: string
+          prep_time_minutes: number | null
+          selling_price: number | null
+          servings: number
+          status: string
+          total_cost: number | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          allergens?: string[] | null
+          business_id?: string | null
+          category?: string | null
+          cook_time_minutes?: number | null
+          cost_per_serving?: number | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          instructions?: string | null
+          margin_percentage?: number | null
+          name: string
+          prep_time_minutes?: number | null
+          selling_price?: number | null
+          servings?: number
+          status?: string
+          total_cost?: number | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          allergens?: string[] | null
+          business_id?: string | null
+          category?: string | null
+          cook_time_minutes?: number | null
+          cost_per_serving?: number | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          instructions?: string | null
+          margin_percentage?: number | null
+          name?: string
+          prep_time_minutes?: number | null
+          selling_price?: number | null
+          servings?: number
+          status?: string
+          total_cost?: number | null
           updated_at?: string
           user_id?: string
         }
@@ -2130,6 +2270,9 @@ export type Database = {
           currency: string | null
           file_id: string | null
           id: string
+          period_end: string | null
+          period_start: string | null
+          period_type: string | null
           report_data: Json
           report_name: string
           total_amount: number | null
@@ -2143,6 +2286,9 @@ export type Database = {
           currency?: string | null
           file_id?: string | null
           id?: string
+          period_end?: string | null
+          period_start?: string | null
+          period_type?: string | null
           report_data: Json
           report_name: string
           total_amount?: number | null
@@ -2156,6 +2302,9 @@ export type Database = {
           currency?: string | null
           file_id?: string | null
           id?: string
+          period_end?: string | null
+          period_start?: string | null
+          period_type?: string | null
           report_data?: Json
           report_name?: string
           total_amount?: number | null
@@ -2597,14 +2746,7 @@ export type Database = {
       }
     }
     Enums: {
-      app_role:
-        | "ORG_ADMIN"
-        | "SITE_MANAGER"
-        | "SITE_STAFF"
-        | "VIEW_ONLY"
-        | "FIRM_ADMIN"
-        | "ACCOUNTANT"
-        | "CONTRIBUTOR"
+      app_role: "ORG_ADMIN" | "SITE_MANAGER" | "SITE_STAFF" | "VIEW_ONLY"
       ck_order_status:
         | "Draft"
         | "Sent"
@@ -2744,15 +2886,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      app_role: [
-        "ORG_ADMIN",
-        "SITE_MANAGER",
-        "SITE_STAFF",
-        "VIEW_ONLY",
-        "FIRM_ADMIN",
-        "ACCOUNTANT",
-        "CONTRIBUTOR",
-      ],
+      app_role: ["ORG_ADMIN", "SITE_MANAGER", "SITE_STAFF", "VIEW_ONLY"],
       ck_order_status: [
         "Draft",
         "Sent",

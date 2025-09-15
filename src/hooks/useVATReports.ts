@@ -94,7 +94,10 @@ export const useVATReports = () => {
           report_data: reportData,
           total_amount: totalAmount,
           currency: 'EUR',
-          analysis_date: new Date().toISOString()
+          analysis_date: new Date().toISOString(),
+          period_start: reportData.periodStart || null,
+          period_end: reportData.periodEnd || null,
+          period_type: reportData.periodType || null
         })
         .select()
         .single();

@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { useVATReports } from '@/hooks/useVATReports';
+import { useJurisdictions } from '@/hooks/useJurisdictions';
 
 export interface VATComplianceData {
   jurisdiction: string;
@@ -17,6 +18,23 @@ export interface VATComplianceData {
 
 export const useVATCompliance = () => {
   const { reports, loading } = useVATReports();
+  const { jurisdictions } = useJurisdictions();
+
+  // Get configured countries from jurisdictions
+  const configuredCountries = useMemo(() => {
+    const countries = new Set<string>();
+    jurisdictions.forEach(j => {
+      if (j.jurisdiction === 'France') countries.add('FR');
+      else if (j.jurisdiction === 'Germany') countries.add('DE');
+      else if (j.jurisdiction === 'Spain') countries.add('ES');
+      else if (j.jurisdiction === 'Italy') countries.add('IT');
+      else if (j.jurisdiction === 'European Union - VAT OSS / IOSS') {
+        // OSS covers multiple countries
+        countries.add('OSS');
+      }
+    });
+    return Array.from(countries);
+  }, [jurisdictions]);
 
   const complianceData = useMemo(() => {
     if (!reports || reports.length === 0) return [];
@@ -146,8 +164,15 @@ export const useVATCompliance = () => {
       .filter(item => item.vatDue > 0 || item.salesAmount > 0) // Garder seulement les pays avec de l'activité
       .sort((a, b) => b.vatDue - a.vatDue); // Trier par TVA due décroissante
 
-    return result;
-  }, [reports]);
+    // Filter by configured jurisdictions only
+    const filteredData = result.filter(data => {
+      if (configuredCountries.length === 0) return true; // Show all if no jurisdictions configured
+      return configuredCountries.includes(data.country) || 
+             (configuredCountries.includes('OSS') && data.isOSS);
+    });
+
+    return filteredData;
+  }, [reports, configuredCountries]);
 
   const totals = useMemo(() => {
     const totalVATDue = complianceData.reduce((sum, item) => sum + item.vatDue, 0);

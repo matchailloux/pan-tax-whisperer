@@ -15,6 +15,7 @@ import { RulesConfig } from './RulesConfig';
 import { processVATWithNewYAMLRules } from '@/utils/newYAMLVATEngine';
 import * as XLSX from 'xlsx';
 import { DebugYAMLBar } from '@/components/DebugYAMLBar';
+import { PeriodSelectionDialog } from './PeriodSelectionDialog';
 
 const UploadSection = () => {
   const [isDragActive, setIsDragActive] = useState(false);
@@ -26,6 +27,8 @@ const UploadSection = () => {
   const [currentFileId, setCurrentFileId] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [processingProgress, setProcessingProgress] = useState(0);
+  const [showPeriodDialog, setShowPeriodDialog] = useState(false);
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
   const { uploadFile, updateFileStatus } = useUserFiles();
@@ -69,7 +72,15 @@ const UploadSection = () => {
       return;
     }
 
-    setUploadedFile(file);
+    // Store the file and show period selection dialog
+    setPendingFile(file);
+    setShowPeriodDialog(true);
+  };
+
+  const handlePeriodConfirm = async (period: any) => {
+    if (!pendingFile) return;
+
+    setUploadedFile(pendingFile);
     setIsProcessing(true);
     setProcessingProgress(0);
     
@@ -77,7 +88,7 @@ const UploadSection = () => {
     setProcessingProgress(20);
     
     // Upload file to Supabase Storage
-    const fileId = await uploadFile(file);
+    const fileId = await uploadFile(pendingFile);
     if (fileId) {
       setCurrentFileId(fileId);
       setProcessingProgress(40);
@@ -85,13 +96,15 @@ const UploadSection = () => {
     }
 
     setProcessingProgress(60);
-    // Process the file
-    await analyzeFile(file, fileId);
+    // Process the file with period information
+    await analyzeFile(pendingFile, fileId, period);
     setProcessingProgress(100);
     setTimeout(() => setIsProcessing(false), 500);
+    
+    setPendingFile(null);
   };
 
-  const analyzeFile = async (file: File, fileId?: string | null) => {
+  const analyzeFile = async (file: File, fileId?: string | null, period?: any) => {
     try {
       const text = await file.text();
       
@@ -130,7 +143,16 @@ const UploadSection = () => {
             const title = forceYAML && (!report.breakdown || report.breakdown.length === 0)
               ? `Analyse ${file.name} (YAML forcé)`
               : `Analyse ${file.name}`;
-            await saveReport(report, title, fileId);
+            
+            // Add period information to the report
+            const reportWithPeriod = {
+              ...report,
+              periodStart: period?.startDate,
+              periodEnd: period?.endDate,
+              periodType: period?.type
+            };
+            
+            await saveReport(reportWithPeriod, title, fileId);
             await updateFileStatus(fileId, 'completed');
           }
 
@@ -159,7 +181,13 @@ const UploadSection = () => {
 
         // Save report to database
         if (fileId) {
-          await saveReport(breakdown, `Analyse ${file.name}`, fileId);
+          const reportWithPeriod = {
+            ...breakdown,
+            periodStart: period?.startDate,
+            periodEnd: period?.endDate,
+            periodType: period?.type
+          };
+          await saveReport(reportWithPeriod, `Analyse ${file.name}`, fileId);
           await updateFileStatus(fileId, 'completed');
         }
 

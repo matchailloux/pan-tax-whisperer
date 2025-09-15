@@ -30,17 +30,9 @@ import {
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Plus, Pencil, Trash2, Globe } from 'lucide-react';
-import { useToast } from '@/hooks/use-toast';
+import { useJurisdictions } from '@/hooks/useJurisdictions';
+import { LoadingSpinner } from '@/components/LoadingSpinner';
 
-interface Jurisdiction {
-  id: string;
-  jurisdiction: string;
-  taxId: string;
-  validFrom: { day: number; month: number; year: number };
-  validUntil?: { day: number; month: number; year: number };
-  permanentEstablishment: boolean;
-  registeredInImportScheme: boolean;
-}
 
 const jurisdictionOptions = [
   'European Union - VAT OSS / IOSS',
@@ -61,10 +53,9 @@ const months = [
 ];
 
 const JurisdictionsPage = () => {
-  const { toast } = useToast();
-  const [jurisdictions, setJurisdictions] = useState<Jurisdiction[]>([]);
+  const { jurisdictions, loading, saveJurisdiction, updateJurisdiction, deleteJurisdiction } = useJurisdictions();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [editingJurisdiction, setEditingJurisdiction] = useState<Jurisdiction | null>(null);
+  const [editingJurisdiction, setEditingJurisdiction] = useState<any>(null);
   
   const [formData, setFormData] = useState({
     jurisdiction: '',
@@ -102,17 +93,17 @@ const JurisdictionsPage = () => {
     setIsDialogOpen(true);
   };
 
-  const handleEditJurisdiction = (jurisdiction: Jurisdiction) => {
+  const handleEditJurisdiction = (jurisdiction: any) => {
     setEditingJurisdiction(jurisdiction);
     setFormData({
       jurisdiction: jurisdiction.jurisdiction,
       taxId: jurisdiction.taxId,
-      validFromDay: jurisdiction.validFrom.day,
-      validFromMonth: jurisdiction.validFrom.month,
-      validFromYear: jurisdiction.validFrom.year,
-      validUntilDay: jurisdiction.validUntil?.day || 1,
-      validUntilMonth: jurisdiction.validUntil?.month || 1,
-      validUntilYear: jurisdiction.validUntil?.year || new Date().getFullYear(),
+      validFromDay: jurisdiction.validFrom.getDate(),
+      validFromMonth: jurisdiction.validFrom.getMonth() + 1,
+      validFromYear: jurisdiction.validFrom.getFullYear(),
+      validUntilDay: jurisdiction.validUntil?.getDate() || 1,
+      validUntilMonth: jurisdiction.validUntil ? jurisdiction.validUntil.getMonth() + 1 : 1,
+      validUntilYear: jurisdiction.validUntil?.getFullYear() || new Date().getFullYear(),
       hasValidUntil: !!jurisdiction.validUntil,
       permanentEstablishment: jurisdiction.permanentEstablishment,
       registeredInImportScheme: jurisdiction.registeredInImportScheme,
@@ -120,63 +111,41 @@ const JurisdictionsPage = () => {
     setIsDialogOpen(true);
   };
 
-  const handleSaveJurisdiction = () => {
+  const handleSaveJurisdiction = async () => {
     if (!formData.jurisdiction || !formData.taxId) {
-      toast({
-        title: "Erreur",
-        description: "Veuillez remplir tous les champs obligatoires.",
-        variant: "destructive"
-      });
       return;
     }
 
-    const newJurisdiction: Jurisdiction = {
-      id: editingJurisdiction?.id || crypto.randomUUID(),
+    const jurisdictionData = {
       jurisdiction: formData.jurisdiction,
       taxId: formData.taxId,
-      validFrom: {
-        day: formData.validFromDay,
-        month: formData.validFromMonth,
-        year: formData.validFromYear,
-      },
-      validUntil: formData.hasValidUntil ? {
-        day: formData.validUntilDay,
-        month: formData.validUntilMonth,
-        year: formData.validUntilYear,
-      } : undefined,
+      validFrom: new Date(formData.validFromYear, formData.validFromMonth - 1, formData.validFromDay),
+      validUntil: formData.hasValidUntil ? new Date(formData.validUntilYear, formData.validUntilMonth - 1, formData.validUntilDay) : undefined,
       permanentEstablishment: formData.permanentEstablishment,
       registeredInImportScheme: formData.registeredInImportScheme,
     };
 
     if (editingJurisdiction) {
-      setJurisdictions(prev => prev.map(j => j.id === editingJurisdiction.id ? newJurisdiction : j));
-      toast({
-        title: "Juridiction modifiée",
-        description: "La juridiction a été mise à jour avec succès.",
-      });
+      await updateJurisdiction(editingJurisdiction.id, jurisdictionData);
     } else {
-      setJurisdictions(prev => [...prev, newJurisdiction]);
-      toast({
-        title: "Juridiction ajoutée",
-        description: "La nouvelle juridiction a été créée avec succès.",
-      });
+      await saveJurisdiction(jurisdictionData);
     }
 
     setIsDialogOpen(false);
     resetForm();
   };
 
-  const handleDeleteJurisdiction = (id: string) => {
-    setJurisdictions(prev => prev.filter(j => j.id !== id));
-    toast({
-      title: "Juridiction supprimée",
-      description: "La juridiction a été supprimée avec succès.",
-    });
+  const handleDeleteJurisdiction = async (id: string) => {
+    await deleteJurisdiction(id);
   };
 
-  const formatDate = (date: { day: number; month: number; year: number }) => {
-    return `${date.day.toString().padStart(2, '0')}/${date.month.toString().padStart(2, '0')}/${date.year}`;
+  const formatDate = (date: Date) => {
+    return date.toLocaleDateString('fr-FR');
   };
+
+  if (loading) {
+    return <LoadingSpinner />;
+  }
 
   return (
     <div className="space-y-6">
