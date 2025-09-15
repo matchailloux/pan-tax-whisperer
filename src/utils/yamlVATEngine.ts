@@ -120,58 +120,94 @@ export function processVATWithYAMLRules(csvContent: string): DetailedVATReport {
  * Preprocessing selon les spécifications YAML
  */
 function preprocessYAML(rawTransactions: any[]): ProcessedTransaction[] {
-  return rawTransactions
-    // Étape 2: Ne garder que SALE / REFUND exactement
-    .filter(transaction => {
-      const txType = (transaction['TRANSACTION_TYPE'] || '').toUpperCase().trim();
-      return txType === 'SALE' || txType === 'REFUND';
-    })
-    .map(transaction => {
-      // Étape 3: Renommer pour faciliter la suite
-      const txType = (transaction['TRANSACTION_TYPE'] || '').trim().toUpperCase();
-      const scheme = (transaction['TAX_REPORTING_SCHEME'] || '').trim();
-      const arrival = (transaction['SALE_ARRIVAL_COUNTRY'] || '').trim();
-      const depart = (transaction['SALE_DEPART_COUNTRY'] || '').trim();
-      let buyerVat = (transaction['BUYER_VAT_NUMBER_COUNTRY'] || '').trim();
-      
-      // Étape 4: Normaliser les vides pour BUYER_VAT
-      const emptyValues = ["", "(VIDE)", "(VIDES)", "NULL", "N/A", "-", "—", "NONE", " "];
-      if (emptyValues.includes(buyerVat)) {
-        buyerVat = '';
+  // Helpers
+  const normalizeTxType = (val: string): 'SALE' | 'REFUND' | '' => {
+    const t = (val || '').toUpperCase().trim();
+    if (t === 'SALE' || t === 'SALES' || t === 'VENTE') return 'SALE';
+    if (t === 'REFUND' || t === 'REFUNDS' || t === 'REMBOURSEMENT' || t === 'RETURN' || t === 'CREDIT' || t === 'CREDIT_NOTE') return 'REFUND';
+    return '';
+  };
+
+  const normalizeScheme = (val: string): string => {
+    const s = (val || '').toUpperCase().trim().replace(/\s+/g, '-');
+    if (['UNION-OSS', 'EU-OSS', 'OSS'].includes(s)) return 'UNION-OSS';
+    if (['REGULAR', 'DOMESTIC', 'LOCAL'].includes(s)) return 'REGULAR';
+    if (['CH-VOEC', 'CH_VOEC', 'VOEC'].includes(s)) return 'CH_VOEC';
+    return s;
+  };
+
+  const emptyValues = ["", "(VIDE)", "(VIDES)", "NULL", "N/A", "-", "—", "NONE", " "];
+
+  const parseAmount = (raw: any): number => {
+    if (typeof raw === 'number') return raw;
+    if (typeof raw !== 'string') return 0;
+    let s = raw.trim().replace(/\s/g, '').replace(/[€$£¥]/g, '');
+    const hasComma = s.includes(',');
+    const hasDot = s.includes('.');
+    if (hasComma && hasDot) {
+      const lastComma = s.lastIndexOf(',');
+      const lastDot = s.lastIndexOf('.');
+      if (lastComma > lastDot) {
+        // EU style: 1.234,56 -> 1234.56
+        s = s.replace(/\./g, '');
+        s = s.replace(/,/g, '.');
+      } else {
+        // US style: 1,234.56 -> 1234.56
+        s = s.replace(/,/g, '');
       }
-      
-      // Étape 5: Uniformiser les codes pays (uppercase)
-      const arrivalUpper = arrival.toUpperCase();
-      const departUpper = depart.toUpperCase();
-      const buyerVatUpper = buyerVat.toUpperCase();
-      
-      // Étape 6: Assainir les montants
-      const rawAmount = transaction['TOTAL_ACTIVITY_VALUE_AMT_VAT_EXCL'];
-      let amount = 0;
-      
-      if (typeof rawAmount === 'string' && rawAmount) {
-        const cleanedAmount = rawAmount
-          .replace(/,/g, '.') // replace_decimal_comma
-          .replace(/[€$£¥]/g, '') // strip_currency_symbols
-          .replace(/[^\d.-]/g, ''); // remove_thousand_seps
-        amount = parseFloat(cleanedAmount) || 0;
-      } else if (typeof rawAmount === 'number') {
-        amount = rawAmount;
-      }
-      
-      // Étape 7: Créer AMOUNT_SIGNED (refunds en négatif)
-      const amountSigned = txType === 'REFUND' ? -Math.abs(amount) : amount;
-      
-      return {
-        TX_TYPE: txType,
-        SCHEME: scheme,
-        ARRIVAL: arrivalUpper,
-        DEPART: departUpper,
-        BUYER_VAT: buyerVatUpper,
-        AMOUNT_RAW: amount,
-        AMOUNT_SIGNED: amountSigned
-      };
-    });
+    } else if (hasComma) {
+      // Only comma -> treat as decimal
+      s = s.replace(/,/g, '.');
+    }
+    s = s.replace(/[^0-9.-]/g, '');
+    const num = parseFloat(s);
+    return isNaN(num) ? 0 : num;
+  };
+
+  const mapCountry = (c: string): string => normalizeCountryCode((c || '').toString().trim());
+
+  const mapped: ProcessedTransaction[] = rawTransactions.map(transaction => {
+    const txType = normalizeTxType(transaction['TRANSACTION_TYPE']);
+    const scheme = normalizeScheme(transaction['TAX_REPORTING_SCHEME']);
+    const arrival = mapCountry(transaction['SALE_ARRIVAL_COUNTRY']);
+    const depart = mapCountry(transaction['SALE_DEPART_COUNTRY']);
+    let buyerVat = (transaction['BUYER_VAT_NUMBER_COUNTRY'] || '').toString().trim().toUpperCase();
+    if (emptyValues.includes(buyerVat)) buyerVat = '';
+    buyerVat = mapCountry(buyerVat) || '';
+
+    const amount = parseAmount(transaction['TOTAL_ACTIVITY_VALUE_AMT_VAT_EXCL']);
+    const amountSigned = txType === 'REFUND' ? -Math.abs(amount) : Math.abs(amount);
+
+    return {
+      TX_TYPE: txType,
+      SCHEME: scheme,
+      ARRIVAL: arrival,
+      DEPART: depart,
+      BUYER_VAT: buyerVat,
+      AMOUNT_RAW: amount,
+      AMOUNT_SIGNED: amountSigned
+    } as ProcessedTransaction;
+  })
+  // Étape 2: Ne garder que SALE / REFUND (après normalisation robuste)
+  .filter(t => t.TX_TYPE === 'SALE' || t.TX_TYPE === 'REFUND');
+
+  console.log(`🔧 ${mapped.length} transactions après preprocessing YAML`);
+  return mapped;
+}
+
+/**
+ * Normalisation des codes pays (vers codes ISO-2)
+ */
+function normalizeCountryCode(countryString: string): string {
+  const country = (countryString || '').trim().toUpperCase();
+  const mapping: { [key: string]: string } = {
+    'GERMANY': 'DE', 'FRANCE': 'FR', 'ITALY': 'IT', 'SPAIN': 'ES', 'NETHERLANDS': 'NL', 'POLAND': 'PL', 'SWEDEN': 'SE', 'BELGIUM': 'BE',
+    'AUSTRIA': 'AT', 'CZECH REPUBLIC': 'CZ', 'CZECHIA': 'CZ', 'DENMARK': 'DK', 'FINLAND': 'FI', 'GREECE': 'GR', 'HUNGARY': 'HU', 'IRELAND': 'IE',
+    'LATVIA': 'LV', 'LITHUANIA': 'LT', 'LUXEMBOURG': 'LU', 'MALTA': 'MT', 'PORTUGAL': 'PT', 'ROMANIA': 'RO', 'SLOVAKIA': 'SK', 'SLOVENIA': 'SI',
+    'ESTONIA': 'EE', 'BULGARIA': 'BG', 'CROATIA': 'HR', 'CYPRUS': 'CY', 'SWITZERLAND': 'CH', 'UNITED KINGDOM': 'GB', 'UK': 'GB'
+  };
+  if (country.length === 2) return country;
+  return mapping[country] || country;
 }
 
 /**
@@ -513,7 +549,16 @@ function parseCSV(csvContent: string): any[] {
   const delimiter = detectDelimiter(firstLine);
   console.log(`🧭 Délimiteur détecté: "${delimiter === '\t' ? 'TAB' : delimiter}"`);
   
-  const headers = parseCSVLine(firstLine, delimiter);
+  const rawHeaders = parseCSVLine(firstLine, delimiter);
+  const normalizeHeader = (h: string) =>
+    h
+      .replace(/^\uFEFF/, '')
+      .trim()
+      .toUpperCase()
+      .replace(/[^A-Z0-9]+/g, '_')
+      .replace(/__+/g, '_')
+      .replace(/^_|_$/g, '');
+  const headers = rawHeaders.map(normalizeHeader);
   const transactions: any[] = [];
 
   for (let i = 1; i < lines.length; i++) {
