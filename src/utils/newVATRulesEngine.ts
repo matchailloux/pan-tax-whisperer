@@ -513,13 +513,27 @@ function normalizeCountryCode(countryString: string): string {
 /**
  * Parser CSV Amazon
  */
+function detectDelimiter(sample: string): string {
+  const comma = (sample.match(/,/g) || []).length;
+  const semicolon = (sample.match(/;/g) || []).length;
+  const tab = (sample.match(/\t/g) || []).length;
+  if (semicolon >= comma && semicolon >= tab) return ';';
+  if (tab >= comma && tab >= semicolon) return '\t';
+  return ','; // défaut
+}
+
+/**
+ * Parser CSV Amazon avec détection de délimiteur et normalisation d'en-têtes
+ */
 function parseAmazonCSV(csvContent: string): any[] {
   const lines = csvContent.split('\n').filter(line => line.trim());
   if (lines.length < 2) return [];
 
   // Gérer les fichiers avec BOM UTF-8
   const firstLine = lines[0].replace(/^\uFEFF/, '');
-  const rawHeaders = parseCSVLine(firstLine);
+  const delimiter = detectDelimiter(firstLine);
+  console.log(`🧭 Délimiteur détecté pour moteur TVA: "${delimiter === '\t' ? 'TAB' : delimiter}"`);
+  const rawHeaders = parseCSVLine(firstLine, delimiter);
   const normalizeHeader = (h: string) =>
     h
       .replace(/^\uFEFF/, '')
@@ -532,7 +546,7 @@ function parseAmazonCSV(csvContent: string): any[] {
   const transactions: any[] = [];
 
   for (let i = 1; i < lines.length; i++) {
-    const values = parseCSVLine(lines[i]);
+    const values = parseCSVLine(lines[i], delimiter);
     const transaction: any = {};
     
     headers.forEach((header, index) => {
@@ -546,7 +560,7 @@ function parseAmazonCSV(csvContent: string): any[] {
   return transactions;
 }
 
-function parseCSVLine(line: string): string[] {
+function parseCSVLine(line: string, delimiter: string): string[] {
   const result: string[] = [];
   let current = '';
   let inQuotes = false;
@@ -554,11 +568,11 @@ function parseCSVLine(line: string): string[] {
   for (let i = 0; i < line.length; i++) {
     const char = line[i];
     
-    if (char === '"' && (i === 0 || line[i-1] === ',')) {
+    if (char === '"' && (i === 0 || line[i-1] === delimiter)) {
       inQuotes = true;
-    } else if (char === '"' && inQuotes && (i === line.length - 1 || line[i+1] === ',')) {
+    } else if (char === '"' && inQuotes && (i === line.length - 1 || line[i+1] === delimiter)) {
       inQuotes = false;
-    } else if (char === ',' && !inQuotes) {
+    } else if (char === delimiter && !inQuotes) {
       result.push(current.trim());
       current = '';
     } else {
