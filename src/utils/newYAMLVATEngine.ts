@@ -359,13 +359,33 @@ export function processVATWithNewYAMLRules(csvContent: string): DetailedVATRepor
 }
 
 function parseCSV(csvContent: string): any[] {
-  const lines = csvContent.split('\n').filter(line => line.trim());
+  // Normaliser les fins de lignes et nettoyer les lignes vides
+  const raw = csvContent.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  let lines = raw.split('\n').filter(line => line.trim() !== '');
   if (lines.length < 2) return [];
 
-  // Gérer BOM et détecter le délimiteur sur la première ligne
-  const firstLine = lines[0].replace(/^\uFEFF/, '');
+  // Retirer un éventuel BOM sur la première ligne
+  lines[0] = lines[0].replace(/^\uFEFF/, '');
+
+  // Détection des lignes « entièrement entre guillemets » avec guillemets doublés (cas Amazon)
+  // Exemple: "A3AL...,""2025-MAY"",..." -> la ligne entière est citée et les champs internes ont des "" (doublés)
+  const sampleSize = Math.min(lines.length, 50);
+  const wrappedCount = lines.slice(0, sampleSize).filter(l => l.startsWith('"') && l.endsWith('"') && l.includes('""')).length;
+  const isWrapped = wrappedCount > 0 && wrappedCount >= Math.max(3, Math.floor(sampleSize * 0.6));
+
+  if (isWrapped) {
+    // On retire l'enveloppe externe et on dés-échappe les guillemets doublés
+    lines = lines.map(l => {
+      let s = l.replace(/^\uFEFF?"/, '');
+      s = s.replace(/"$/, '');
+      s = s.replace(/""/g, '"');
+      return s;
+    });
+  }
+
+  const firstLine = lines[0];
   const delimiter = detectDelimiter(firstLine);
-  console.log(`🧭 Délimiteur détecté: "${delimiter === '\t' ? 'TAB' : delimiter}"`);
+  console.log(`🧭 Délimiteur détecté: "${delimiter === '\t' ? 'TAB' : delimiter}"${isWrapped ? ' • normalisation guillemets appliquée' : ''}`);
 
   const rawHeaders = parseCSVLine(firstLine, delimiter);
   const normalizeHeader = (h: string) =>
