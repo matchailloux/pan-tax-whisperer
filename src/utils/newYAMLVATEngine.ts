@@ -318,39 +318,74 @@ function parseCSV(csvContent: string): any[] {
   const lines = csvContent.split('\n').filter(line => line.trim());
   if (lines.length < 2) return [];
 
-  // Detect delimiter
-  const firstLine = lines[0];
-  const delimiters = ['\t', ';', '|', ','];
-  let delimiter = ',';
-  let maxCols = 0;
+  // Gérer BOM et détecter le délimiteur sur la première ligne
+  const firstLine = lines[0].replace(/^\uFEFF/, '');
+  const delimiter = detectDelimiter(firstLine);
+  console.log(`🧭 Délimiteur détecté: "${delimiter === '\t' ? 'TAB' : delimiter}"`);
 
-  for (const del of delimiters) {
-    const cols = firstLine.split(del).length;
-    if (cols > maxCols) {
-      maxCols = cols;
-      delimiter = del;
-    }
-  }
+  const rawHeaders = parseCSVLine(firstLine, delimiter);
+  const normalizeHeader = (h: string) =>
+    h
+      .replace(/^\uFEFF/, '')
+      .trim()
+      .toUpperCase()
+      .replace(/[^A-Z0-9]+/g, '_')
+      .replace(/__+/g, '_')
+      .replace(/^_|_$/g, '');
+  const headers = rawHeaders.map(normalizeHeader);
 
-  console.log(`📝 Délimiteur détecté: "${delimiter}"`);
-
-  // Parse header
-  const headers = lines[0].split(delimiter).map(h => h.trim().replace(/"/g, ''));
-  
-  // Parse data
-  const transactions = [];
+  const transactions: any[] = [];
   for (let i = 1; i < lines.length; i++) {
-    const values = lines[i].split(delimiter).map(v => v.trim().replace(/"/g, ''));
-    if (values.length === headers.length) {
-      const transaction: any = {};
-      headers.forEach((header, index) => {
-        transaction[header] = values[index];
-      });
-      transactions.push(transaction);
+    const values = parseCSVLine(lines[i], delimiter);
+    const tx: any = {};
+    headers.forEach((header, idx) => {
+      const value = values[idx] ?? '';
+      tx[header] = typeof value === 'string' ? value.trim() : value;
+    });
+    transactions.push(tx);
+  }
+  return transactions;
+}
+
+function detectDelimiter(sample: string): string {
+  const counts = {
+    ',': (sample.match(/,/g) || []).length,
+    ';': (sample.match(/;/g) || []).length,
+    '\t': (sample.match(/\t/g) || []).length,
+    '|': (sample.match(/\|/g) || []).length,
+  } as Record<string, number>;
+  let best = ',';
+  let max = -1;
+  for (const [del, count] of Object.entries(counts)) {
+    if (count > max) { max = count; best = del; }
+  }
+  return best;
+}
+
+function parseCSVLine(line: string, delimiter: string): string[] {
+  const result: string[] = [];
+  let current = '';
+  let inQuotes = false;
+
+  for (let i = 0; i < line.length; i++) {
+    const char = line[i];
+    if (char === '"') {
+      // Toggle quotes unless it's an escaped quote
+      if (inQuotes && line[i + 1] === '"') {
+        current += '"';
+        i++; // skip escaped quote
+      } else {
+        inQuotes = !inQuotes;
+      }
+    } else if (char === delimiter && !inQuotes) {
+      result.push(current);
+      current = '';
+    } else {
+      current += char;
     }
   }
-
-  return transactions;
+  result.push(current);
+  return result.map(s => s.trim().replace(/^\uFEFF/, ''));
 }
 
 function preprocessTransactions(transactions: any[]): ProcessedTransaction[] {
