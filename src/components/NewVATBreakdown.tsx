@@ -154,6 +154,42 @@ export function NewVATBreakdown({ report, fileName }: NewVATBreakdownProps) {
         })}
       </div>
 
+      {/* Ventilation par Régime TVA */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Ventilation par Régime TVA</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Régime</TableHead>
+                <TableHead className="text-right">Montant HT (signé)</TableHead>
+                <TableHead className="text-right">Transactions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {[
+                { label: 'OSS', match: (t: string) => t.includes('OSS') },
+                { label: 'Domestique B2C', match: (t: string) => t.includes('B2C') },
+                { label: 'Domestique B2B', match: (t: string) => t.includes('B2B') },
+                { label: 'Intracommunautaire', match: (t: string) => t.includes('Intracommunautaire') },
+                { label: 'Suisse (VOEC)', match: (t: string) => t.includes('Suisse') || t.includes('VOEC') },
+                { label: 'Autre', match: (t: string) => t.includes('Autre') },
+              ].map(({ label, match }) => {
+                const kpi = kpiCards.find((k) => match(k.title)) || { amount: 0, count: 0 };
+                return (
+                  <TableRow key={label}>
+                    <TableCell>{label}</TableCell>
+                    <TableCell className="text-right font-mono">{kpi.amount ? formatAmount(kpi.amount) : '-'}</TableCell>
+                    <TableCell className="text-right">{formatNumber(kpi.count || 0)}</TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
       {/* Tableau détaillé par pays */}
       <Card>
         <CardHeader>
@@ -180,7 +216,7 @@ export function NewVATBreakdown({ report, fileName }: NewVATBreakdownProps) {
                 <TableHead className="text-right">B2C</TableHead>
                 <TableHead className="text-right">B2B</TableHead>
                 <TableHead className="text-right">Intracom</TableHead>
-                <TableHead className="text-right">Export</TableHead>
+                <TableHead className="text-right">Suisse (VOEC)</TableHead>
                 <TableHead className="text-right">Autre</TableHead>
                 <TableHead className="text-right">Total</TableHead>
               </TableRow>

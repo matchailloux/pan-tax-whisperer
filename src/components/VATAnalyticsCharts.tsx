@@ -27,10 +27,11 @@ export function VATAnalyticsCharts({ report }: VATAnalyticsChartsProps) {
   // Préparer les données pour le graphique par régime
   const regimeData = [
     { name: 'OSS', value: kpiCards.find((k: any) => k.title.includes('OSS'))?.amount || 0, color: '#3B82F6' },
-    { name: 'B2C National', value: kpiCards.find((k: any) => k.title.includes('B2C'))?.amount || 0, color: '#10B981' },
-    { name: 'B2B National', value: kpiCards.find((k: any) => k.title.includes('B2B'))?.amount || 0, color: '#8B5CF6' },
+    { name: 'Domestique B2C', value: kpiCards.find((k: any) => k.title.includes('B2C'))?.amount || 0, color: '#10B981' },
+    { name: 'Domestique B2B', value: kpiCards.find((k: any) => k.title.includes('B2B'))?.amount || 0, color: '#8B5CF6' },
     { name: 'Intracommunautaire', value: kpiCards.find((k: any) => k.title.includes('Intracommunautaire'))?.amount || 0, color: '#F59E0B' },
-    { name: 'Export', value: kpiCards.find((k: any) => k.title.includes('Export'))?.amount || 0, color: '#EF4444' }
+    { name: 'Suisse (VOEC)', value: kpiCards.find((k: any) => k.title.includes('Suisse') || k.title.includes('VOEC'))?.amount || 0, color: '#EF4444' },
+    { name: 'Autre', value: kpiCards.find((k: any) => k.title.includes('Autre'))?.amount || 0, color: '#6B7280' }
   ].filter(item => item.value > 0);
 
   const formatAmount = (value: number) => {
