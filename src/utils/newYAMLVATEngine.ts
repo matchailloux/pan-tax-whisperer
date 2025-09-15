@@ -1,4 +1,48 @@
-import { DetailedVATReport, VATRuleData, VATKPICard } from './newVATRulesEngine';
+// Types pour le moteur TVA YAML
+export interface VATRuleData {
+  country: string;
+  oss: number;
+  domesticB2C: number;
+  domesticB2B: number;
+  intracommunautaire: number;
+  suisse: number;
+  residuel: number;
+  total: number;
+}
+
+export interface VATKPICard {
+  title: string;
+  amount: number;
+  count: number;
+}
+
+export interface DetailedVATReport {
+  breakdown: VATRuleData[];
+  kpiCards: VATKPICard[];
+  sanityCheckGlobal: {
+    grandTotal: number;
+    ossTotal: number;
+    regularTotal: number;
+    suisseTotal: number;
+    residuTotal: number;
+    b2cTotal: number;
+    b2bTotal: number;
+    intracomTotal: number;
+    diffGrandTotalVsSum: number;
+    diffRegularVsComponents: number;
+    isValid: boolean;
+  };
+  sanityCheckByCountry: any[];
+  rulesApplied: {
+    ossRules: number;
+    domesticB2CRules: number;
+    domesticB2BRules: number;
+    intracommunautaireRules: number;
+    suisseRules: number;
+    residuelRules: number;
+    totalProcessed: number;
+  };
+}
 
 // Configuration YAML intégrée
 const VAT_CONFIG_YAML = `

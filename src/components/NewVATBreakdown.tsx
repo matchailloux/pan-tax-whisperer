@@ -3,7 +3,7 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { CheckCircle, XCircle, AlertTriangle, Info, TrendingUp, Users, Globe, Building, MapPin } from "lucide-react";
-import { DetailedVATReport } from "@/utils/newVATRulesEngine";
+import { DetailedVATReport } from "@/utils/newYAMLVATEngine";
 
 interface NewVATBreakdownProps {
   report: DetailedVATReport;

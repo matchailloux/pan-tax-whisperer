@@ -13,7 +13,6 @@ import { NewVATBreakdown } from './NewVATBreakdown';
 import { VATAnalyticsCharts } from './VATAnalyticsCharts';
 import { RulesConfig } from './RulesConfig';
 import { processVATWithNewYAMLRules } from '@/utils/newYAMLVATEngine';
-import { processAmazonVATReport } from '@/utils/amazonVATEngine';
 import * as XLSX from 'xlsx';
 import { DebugYAMLBar } from '@/components/DebugYAMLBar';
 
@@ -141,7 +140,7 @@ const UploadSection = () => {
           });
         } else {
           // Fallback automatique vers le moteur legacy si rien n'est détecté
-          const breakdown = processAmazonVATReport(text);
+          const breakdown = processVATWithNewYAMLRules(text);
           setVatBreakdown(breakdown);
           setNewVatData(null);
 
@@ -157,7 +156,7 @@ const UploadSection = () => {
         }
       } else {
         // Use legacy engine
-        const breakdown = processAmazonVATReport(text);
+        const breakdown = processVATWithNewYAMLRules(text);
         setVatBreakdown(breakdown);
         setNewVatData(null);
 

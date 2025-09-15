@@ -7,7 +7,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { useClientVATReports } from '@/hooks/useClientVATReports';
 import { useVATAnalysis } from '@/hooks/useVATAnalysis';
 import { NewVATBreakdown } from '@/components/NewVATBreakdown';
-import { DetailedVATReport } from '@/utils/newVATRulesEngine';
+import { DetailedVATReport } from '@/utils/newYAMLVATEngine';
 
 interface LatestAnalysisCardProps {
   clientId: string;

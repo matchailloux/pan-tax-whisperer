@@ -10,7 +10,7 @@ import { useClientFiles } from '@/hooks/useClientFiles';
 import { useVATAnalysis } from '@/hooks/useVATAnalysis';
 import { NewVATBreakdown } from '@/components/NewVATBreakdown';
 import { Eye, FileText, BarChart3, Download, Calendar } from 'lucide-react';
-import { DetailedVATReport } from '@/utils/newVATRulesEngine';
+import { DetailedVATReport } from '@/utils/newYAMLVATEngine';
 
 const ClientVATAnalysis = () => {
   const { clientId } = useParams();

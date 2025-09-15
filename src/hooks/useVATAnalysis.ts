@@ -2,9 +2,7 @@ import { useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useClientVATReports } from '@/hooks/useClientVATReports';
-import { DetailedVATReport } from '@/utils/newVATRulesEngine';
-import { processVATWithNewYAMLRules } from '@/utils/newYAMLVATEngine';
-import { processAmazonVATReport } from '@/utils/amazonVATEngine';
+import { DetailedVATReport, processVATWithNewYAMLRules } from '@/utils/newYAMLVATEngine';
 
 export interface AnalysisResult {
   success: boolean;
@@ -140,7 +138,7 @@ export const useVATAnalysis = () => {
         };
       } else {
         // Fallback vers le moteur legacy
-        const legacyReport = processAmazonVATReport(fileContent);
+        const legacyReport = processVATWithNewYAMLRules(fileContent);
         const reportId = await saveReport(legacyReport, `Analyse ${fileName} (fallback)`, fileId, clientId);
         
         if (updateFileStatus) {
