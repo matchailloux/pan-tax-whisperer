@@ -141,7 +141,7 @@ function preprocessYAML(rawTransactions: any[]): ProcessedTransaction[] {
   // Helpers
   const normalizeTxType = (val: string): 'SALE' | 'REFUND' | '' => {
     const t = (val || '').replace(/"/g, '').toUpperCase().trim();
-    if (t === 'SALE' || t === 'SALES' || t === 'VENTE') return 'SALE';
+    if (t === 'SALE' || t === 'SALES' || t === 'VENTE' || t === 'ORDER' || t === 'ORDERS') return 'SALE';
     if (t === 'REFUND' || t === 'REFUNDS' || t === 'REMBOURSEMENT' || t === 'RETURN' || t === 'CREDIT' || t === 'CREDIT_NOTE') return 'REFUND';
     return '';
   };
@@ -247,7 +247,15 @@ function preprocessYAML(rawTransactions: any[]): ProcessedTransaction[] {
     buyerVat = mapCountry(buyerVat) || '';
 
     const amount = parseAmount(getFirst(transaction, amountKeys, ''));
-    const amountSigned = txType === 'REFUND' ? -Math.abs(amount) : Math.abs(amount);
+    let amountSigned: number;
+    if (txType === 'REFUND') {
+      amountSigned = -Math.abs(amount);
+    } else if (txType === 'SALE') {
+      amountSigned = Math.abs(amount);
+    } else {
+      // Si type inconnu, conserver le signe original du montant
+      amountSigned = amount;
+    }
 
     return {
       TX_TYPE: txType,
