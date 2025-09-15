@@ -132,70 +132,98 @@ export function processVATWithNewRules(csvContent: string): DetailedVATReport {
  * Preprocessing des données selon les spécifications YAML v1
  */
 function preprocessTransactions(rawTransactions: any[]): ProcessedVATTransaction[] {
-  return rawTransactions
+  // Helpers pour récupérer des valeurs avec fallback sur plusieurs variantes d'en-têtes
+  const getFirst = (obj: any, keys: string[], defaultValue: any = '') => {
+    for (const key of keys) {
+      if (Object.prototype.hasOwnProperty.call(obj, key)) {
+        const v = obj[key];
+        if (v !== undefined && v !== null && `${v}`.trim() !== '') return v;
+      }
+    }
+    return defaultValue;
+  };
+
+  const normalizeTxType = (type: string): 'SALE' | 'REFUND' | '' => {
+    const t = (type || '').toUpperCase().trim();
+    if (['SALE', 'SALES', 'VENTE'].includes(t)) return 'SALE';
+    if (['REFUND', 'REFUNDS', 'REMBOURSEMENT', 'RETURN', 'CREDIT', 'CREDIT_NOTE'].includes(t)) return 'REFUND';
+    return '';
+  };
+
+  const txTypeKeys = ['TRANSACTION_TYPE', 'TRANSACTIONTYPE', 'TX_TYPE', 'TYPE', 'TRANSACTION', 'TYPE_TRANSACTION'];
+  const schemeKeys = ['TAX_REPORTING_SCHEME', 'TAX_REPORTING', 'REPORTING_SCHEME', 'VAT_REPORTING_SCHEME', 'SCHEME'];
+  const arrivalKeys = ['SALE_ARRIVAL_COUNTRY', 'ARRIVAL_COUNTRY', 'ARRIVAL', 'SHIP_TO_COUNTRY', 'SHIP_TO', 'DESTINATION_COUNTRY'];
+  const departKeys = ['SALE_DEPART_COUNTRY', 'DEPART_COUNTRY', 'DEPART', 'SHIP_FROM_COUNTRY', 'SHIP_FROM', 'ORIGIN_COUNTRY'];
+  const buyerVatKeys = ['BUYER_VAT_NUMBER_COUNTRY', 'BUYER_VAT_COUNTRY', 'BUYER_VAT', 'VAT_NUMBER_COUNTRY', 'VAT_BUYER_COUNTRY', 'BUYER_VAT_NUMBER_PREFIX'];
+  const amountKeys = ['TOTAL_ACTIVITY_VALUE_AMT_VAT_EXCL', 'TOTAL_ACTIVITY_VALUE_VAT_EXCL', 'TOTAL_ACTIVITY_VALUE', 'TOTAL_VAT_EXCL', 'AMOUNT_VAT_EXCL', 'AMOUNT', 'NET_AMOUNT', 'ITEM_PRICE_EXCL_VAT', 'TRANSACTION_AMOUNT'];
+
+  const normalizeScheme = (scheme: string): string => {
+    const s = (scheme || '').toUpperCase().trim();
+    if (s === 'UNION-OSS' || s === 'UNION OSS' || s === 'EU-OSS' || s === 'OSS') return 'UNION-OSS';
+    if (s === 'REGULAR' || s === 'DOMESTIC' || s === 'LOCAL') return 'REGULAR';
+    if (s === 'CH_VOEC' || s === 'CH-VOEC' || s === 'VOEC') return 'CH_VOEC';
+    // éviter de transformer IOSS en UNION-OSS (ce n'est pas le même régime)
+    return s;
+  };
+
+  const cleaned = rawTransactions
     .filter(transaction => {
-      // Étape 2: Ne garder que SALE/SALES/REFUND (ajout de variantes courantes)
-      const txType = (transaction['TRANSACTION_TYPE'] || '').toUpperCase().trim();
-      return ['SALE', 'SALES', 'REFUND', 'REFUNDS', 'VENTE', 'REMBOURSEMENT'].includes(txType);
+      // Ne jetez pas tout par défaut: on conserve si type connu OU si un montant existe
+      const tx = normalizeTxType(getFirst(transaction, txTypeKeys, ''));
+      if (tx) return true;
+      const rawAmount = getFirst(transaction, amountKeys, '');
+      return rawAmount !== '' && rawAmount !== undefined;
     })
     .map(transaction => {
       const processed: ProcessedVATTransaction = {};
 
-      // Étape 3: Renommer les colonnes pour simplifier
-      processed.TX_TYPE = (transaction['TRANSACTION_TYPE'] || '').trim().toUpperCase();
-      processed.SCHEME = (transaction['TAX_REPORTING_SCHEME'] || '').trim();
-      processed.ARRIVAL = (transaction['SALE_ARRIVAL_COUNTRY'] || '').trim();
-      processed.DEPART = (transaction['SALE_DEPART_COUNTRY'] || '').trim();
-      processed.BUYER_VAT = (transaction['BUYER_VAT_NUMBER_COUNTRY'] || '').trim();
-      
-      // Étape 4: Normaliser les vides pour BUYER_VAT
+      // Récupération et normalisation des champs
+      const rawTxType = getFirst(transaction, txTypeKeys, '');
+      let txType = normalizeTxType(rawTxType);
+
+      let scheme = normalizeScheme(getFirst(transaction, schemeKeys, ''));
+      let arrival = (getFirst(transaction, arrivalKeys, '') + '').toUpperCase().trim();
+      let depart = (getFirst(transaction, departKeys, '') + '').toUpperCase().trim();
+      let buyerVat = (getFirst(transaction, buyerVatKeys, '') + '').toUpperCase().trim();
+
+      // Normaliser vides pour BUYER_VAT
       const emptyValues = ['', '(VIDE)', '(VIDES)', 'NULL', 'N/A', '-', '—', 'NONE', ' '];
-      if (emptyValues.includes(processed.BUYER_VAT || '')) {
-        processed.BUYER_VAT = '';
-      }
-      
-      // Étape 5: Uniformiser les codes pays (uppercase)
-      processed.ARRIVAL = (processed.ARRIVAL || '').toUpperCase();
-      processed.DEPART = (processed.DEPART || '').toUpperCase();
-      processed.BUYER_VAT = (processed.BUYER_VAT || '').toUpperCase();
-      
-      // Normaliser les schémas
-      const schemeMapping: { [key: string]: string } = {
-        'Union-OSS': 'UNION-OSS',
-        'union-oss': 'UNION-OSS',
-        'Regular': 'REGULAR',
-        'regular': 'REGULAR'
-      };
-      if (processed.SCHEME && schemeMapping[processed.SCHEME]) {
-        processed.SCHEME = schemeMapping[processed.SCHEME];
-      }
-      
-      // Étape 6: Assainir les montants
-      const rawAmount = transaction['TOTAL_ACTIVITY_VALUE_AMT_VAT_EXCL'];
+      if (emptyValues.includes(buyerVat)) buyerVat = '';
+
+      // Montant brut
+      const rawAmount = getFirst(transaction, amountKeys, '');
       let amount = 0;
-      
       if (typeof rawAmount === 'string' && rawAmount) {
         const cleanedAmount = rawAmount
-          .replace(/,/g, '.') // Remplacer virgules par points
-          .replace(/[€$£¥]/g, '') // Supprimer symboles monétaires
-          .replace(/[^\d.-]/g, ''); // Supprimer autres caractères
+          .replace(/,/g, '.')
+          .replace(/[€$£¥]/g, '')
+          .replace(/[^\d.-]/g, '');
         amount = parseFloat(cleanedAmount) || 0;
       } else if (typeof rawAmount === 'number') {
         amount = rawAmount;
       }
-      
-      processed.AMOUNT_RAW = amount;
-      
-      // Étape 7: Créer AMOUNT_SIGNED (refunds en négatif)
-      if (processed.TX_TYPE === 'REFUND') {
-        processed.AMOUNT_SIGNED = -Math.abs(amount);
-      } else {
-        processed.AMOUNT_SIGNED = amount;
+
+      // Si type inconnu, déduire via le signe du montant (négatif => refund)
+      if (!txType) {
+        if (amount < 0) txType = 'REFUND';
+        else txType = 'SALE';
       }
-      
+
+      processed.TX_TYPE = txType;
+      processed.SCHEME = scheme;
+      processed.ARRIVAL = arrival;
+      processed.DEPART = depart;
+      processed.BUYER_VAT = buyerVat;
+      processed.AMOUNT_RAW = amount;
+      processed.AMOUNT_SIGNED = txType === 'REFUND' ? -Math.abs(amount) : Math.abs(amount);
+
       return processed;
     });
+
+  console.log(`🔧 ${cleaned.length} transactions après preprocessing`);
+  return cleaned;
 }
+
 
 /**
  * Application des règles de ventilation TVA selon les spécifications YAML v1
