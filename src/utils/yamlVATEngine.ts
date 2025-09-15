@@ -77,11 +77,27 @@ export function processVATWithYAMLRules(csvContent: string): DetailedVATReport {
   console.log('🚀 Démarrage moteur TVA YAML complet');
   
   // Étape 1: Parser le CSV
-  let transactions = parseCSV(csvContent);
-  console.log(`📊 ${transactions.length} transactions parsées`);
+  let rawTransactions = parseCSV(csvContent);
+  console.log(`📊 ${rawTransactions.length} transactions parsées`);
+
+  // 🐛 DIAGNOSTIC CSV INITIAL
+  if (rawTransactions.length > 0) {
+    const firstRow = rawTransactions[0];
+    const headers = Object.keys(firstRow);
+    console.log('🔍 DIAGNOSTIC CSV INITIAL:');
+    console.log('📋 En-têtes originaux (5 premiers):', headers.slice(0, 5));
+    console.log('📋 Tous les en-têtes détectés (' + headers.length + '):', headers);
+    console.log('📄 Échantillon - 1ère ligne:', firstRow);
+    if (rawTransactions.length > 1) {
+      console.log('📄 Échantillon - 2ème ligne:', rawTransactions[1]);
+    }
+    if (rawTransactions.length > 2) {
+      console.log('📄 Échantillon - 3ème ligne:', rawTransactions[2]);
+    }
+  }
   
   // Étape 2: Preprocessing selon YAML
-  transactions = preprocessYAML(transactions);
+  let transactions = preprocessYAML(rawTransactions);
   console.log(`🔧 ${transactions.length} transactions après preprocessing YAML`);
   
   // Étape 3: Appliquer les règles YAML
@@ -120,6 +136,8 @@ export function processVATWithYAMLRules(csvContent: string): DetailedVATReport {
  * Preprocessing selon les spécifications YAML
  */
 function preprocessYAML(rawTransactions: any[]): ProcessedTransaction[] {
+  console.log('🔍 DIAGNOSTIC MAPPING DES COLONNES:');
+  
   // Helpers
   const normalizeTxType = (val: string): 'SALE' | 'REFUND' | '' => {
     const t = (val || '').toUpperCase().trim();
@@ -184,6 +202,29 @@ function preprocessYAML(rawTransactions: any[]): ProcessedTransaction[] {
   const buyerVatKeys = ['BUYER_VAT_NUMBER_COUNTRY','BUYER_VAT_COUNTRY','BUYER_VAT','VAT_NUMBER_COUNTRY','VAT_BUYER_COUNTRY','BUYER_VAT_NUMBER_PREFIX'];
   const amountKeys = ['TOTAL_ACTIVITY_VALUE_AMT_VAT_EXCL','TOTAL_ACTIVITY_VALUE_VAT_EXCL','TOTAL_ACTIVITY_VALUE','TOTAL_VAT_EXCL','AMOUNT_VAT_EXCL','AMOUNT','NET_AMOUNT','ITEM_PRICE_EXCL_VAT','TRANSACTION_AMOUNT'];
 
+  // 🔍 Diagnostic du mapping des colonnes
+  if (rawTransactions.length > 0) {
+    const sampleHeaders = Object.keys(rawTransactions[0]);
+    console.log('📊 MAPPING DES COLONNES:');
+    
+    const checkMapping = (label: string, keys: string[]) => {
+      const found = keys.find(k => sampleHeaders.includes(k));
+      console.log(`• ${label}: Recherché [${keys.slice(0,3).join(', ')}...] → ${found ? `✅ Trouvé: ${found}` : '❌ MANQUANT'}`);
+      if (found && rawTransactions[0][found] !== undefined) {
+        const sampleValue = rawTransactions[0][found];
+        console.log(`  📄 Exemple valeur brute: "${sampleValue}"`);
+      }
+      return found;
+    };
+    
+    checkMapping('TX_TYPE', txTypeKeys);
+    checkMapping('SCHEME', schemeKeys);
+    checkMapping('ARRIVAL', arrivalKeys);
+    checkMapping('DEPART', departKeys);
+    checkMapping('BUYER_VAT', buyerVatKeys);
+    checkMapping('AMOUNT', amountKeys);
+  }
+
   const mapped: ProcessedTransaction[] = rawTransactions.map(transaction => {
     const txType = normalizeTxType(getFirst(transaction, txTypeKeys, ''));
     const scheme = normalizeScheme(getFirst(transaction, schemeKeys, ''));
@@ -205,12 +246,49 @@ function preprocessYAML(rawTransactions: any[]): ProcessedTransaction[] {
       AMOUNT_RAW: amount,
       AMOUNT_SIGNED: amountSigned
     } as ProcessedTransaction;
-  })
-  // Étape 2: Ne garder que SALE / REFUND (après normalisation robuste)
-  .filter(t => t.TX_TYPE === 'SALE' || t.TX_TYPE === 'REFUND');
+  });
 
-  console.log(`🔧 ${mapped.length} transactions après preprocessing YAML`);
-  return mapped;
+  // 🔍 Diagnostic après mapping mais avant filtrage
+  console.log('📊 DIAGNOSTIC PREPROCESSING:');
+  console.log(`• Total transactions mappées: ${mapped.length}`);
+  
+  // Compter les TX_TYPE
+  const txTypeCounts = mapped.reduce((acc, t) => {
+    acc[t.TX_TYPE || 'VIDE'] = (acc[t.TX_TYPE || 'VIDE'] || 0) + 1;
+    return acc;
+  }, {} as Record<string, number>);
+  console.log('• Distribution TX_TYPE:', txTypeCounts);
+  
+  // Compter les SCHEME
+  const schemeCounts = mapped.reduce((acc, t) => {
+    acc[t.SCHEME || 'VIDE'] = (acc[t.SCHEME || 'VIDE'] || 0) + 1;
+    return acc;
+  }, {} as Record<string, number>);
+  console.log('• Distribution SCHEME:', schemeCounts);
+  
+  // Afficher exemples de valeurs trouvées
+  const uniqueTxTypes = [...new Set(mapped.map(t => t.TX_TYPE).filter(Boolean))];
+  const uniqueSchemes = [...new Set(mapped.map(t => t.SCHEME).filter(Boolean))];
+  console.log('• TX_TYPE uniques trouvés:', uniqueTxTypes);
+  console.log('• SCHEME uniques trouvés:', uniqueSchemes);
+
+  // Étape 2: Ne garder que SALE / REFUND (après normalisation robuste)
+  const filtered = mapped.filter(t => t.TX_TYPE === 'SALE' || t.TX_TYPE === 'REFUND');
+  
+  console.log(`🔧 ${filtered.length} transactions après filtrage SALE/REFUND (éliminées: ${mapped.length - filtered.length})`);
+  
+  // 🔍 Diagnostic post-filtrage
+  if (filtered.length > 0) {
+    console.log('✅ Échantillons post-filtrage (3 premiers):');
+    filtered.slice(0, 3).forEach((t, i) => {
+      console.log(`  ${i+1}. TX_TYPE: ${t.TX_TYPE}, SCHEME: ${t.SCHEME}, DEPART: ${t.DEPART}, ARRIVAL: ${t.ARRIVAL}, AMOUNT: ${t.AMOUNT_SIGNED}`);
+    });
+  } else {
+    console.log('❌ AUCUNE transaction après filtrage SALE/REFUND !');
+    console.log('🔍 Problème possible: Les valeurs TX_TYPE ne sont pas reconnues comme SALE/REFUND');
+  }
+  
+  return filtered;
 }
 
 /**
@@ -234,10 +312,44 @@ function normalizeCountryCode(countryString: string): string {
 function applyYAMLRules(transactions: ProcessedTransaction[]): VATRuleData[] {
   const countryBreakdown: { [country: string]: VATRuleData } = {};
   
+  // 🔍 Diagnostic de la classification
+  console.log('📊 DIAGNOSTIC CLASSIFICATION:');
+  const classificationStats = {
+    OSS: 0,
+    DOMESTIC_B2C: 0,
+    DOMESTIC_B2B: 0,
+    INTRACOMMUNAUTAIRE: 0,
+    SUISSE: 0,
+    RESIDUEL: 0,
+    NON_CLASSIFIE: 0
+  };
+  
+  const examplesByType: Record<string, any[]> = {};
+  
   // Classer les transactions selon les règles YAML
   transactions.forEach(transaction => {
     const classification = classifyTransactionYAML(transaction);
-    if (!classification) return;
+    if (!classification) {
+      classificationStats.NON_CLASSIFIE++;
+      return;
+    }
+    
+    // Statistiques
+    classificationStats[classification.vatType]++;
+    
+    // Collecter des exemples
+    if (!examplesByType[classification.vatType]) {
+      examplesByType[classification.vatType] = [];
+    }
+    if (examplesByType[classification.vatType].length < 2) {
+      examplesByType[classification.vatType].push({
+        scheme: transaction.SCHEME,
+        depart: transaction.DEPART,
+        arrival: transaction.ARRIVAL,
+        buyerVat: transaction.BUYER_VAT,
+        amount: transaction.AMOUNT_SIGNED
+      });
+    }
     
     const { country, vatType } = classification;
     const amountSigned = transaction.AMOUNT_SIGNED;
@@ -281,7 +393,35 @@ function applyYAMLRules(transactions: ProcessedTransaction[]): VATRuleData[] {
     countryBreakdown[country].total += amountSigned;
   });
   
-  return Object.values(countryBreakdown).sort((a, b) => a.country.localeCompare(b.country));
+  // 🔍 Afficher les statistiques de classification
+  console.log('📈 STATISTIQUES DE CLASSIFICATION:');
+  Object.entries(classificationStats).forEach(([type, count]) => {
+    console.log(`• ${type}: ${count} transactions`);
+  });
+  
+  // 🔍 Afficher des exemples par type
+  console.log('📄 EXEMPLES PAR TYPE DE CLASSIFICATION:');
+  Object.entries(examplesByType).forEach(([type, examples]) => {
+    console.log(`• ${type} (${examples.length} exemples):`);
+    examples.forEach((ex, i) => {
+      console.log(`  ${i+1}. SCHEME: ${ex.scheme}, DEPART: ${ex.depart}, ARRIVAL: ${ex.arrival}, BUYER_VAT: ${ex.buyerVat}, AMOUNT: ${ex.amount}`);
+    });
+  });
+  
+  if (classificationStats.NON_CLASSIFIE > 0) {
+    console.log(`❌ ${classificationStats.NON_CLASSIFIE} transactions NON CLASSIFIÉES !`);
+    // Afficher quelques exemples de transactions non classifiées
+    const unclassified = transactions.filter(t => !classifyTransactionYAML(t)).slice(0, 3);
+    console.log('📄 Exemples de transactions non classifiées:');
+    unclassified.forEach((t, i) => {
+      console.log(`  ${i+1}. SCHEME: ${t.SCHEME}, DEPART: ${t.DEPART}, ARRIVAL: ${t.ARRIVAL}, BUYER_VAT: ${t.BUYER_VAT}, TX_TYPE: ${t.TX_TYPE}`);
+    });
+  }
+  
+  const breakdown = Object.values(countryBreakdown).sort((a, b) => a.country.localeCompare(b.country));
+  console.log(`📊 RÉSULTAT FINAL: ${breakdown.length} pays dans la ventilation`);
+  
+  return breakdown;
 }
 
 interface VentilationYAMLResult {
@@ -561,13 +701,18 @@ function detectDelimiter(sample: string): string {
 
 function parseCSV(csvContent: string): any[] {
   const lines = csvContent.split('\n').filter(line => line.trim());
-  if (lines.length < 2) return [];
+  if (lines.length < 2) {
+    console.log('❌ ERREUR CSV: Fichier vide ou sans données (moins de 2 lignes)');
+    return [];
+  }
 
   const firstLine = lines[0].replace(/^\uFEFF/, '');
   const delimiter = detectDelimiter(firstLine);
   console.log(`🧭 Délimiteur détecté: "${delimiter === '\t' ? 'TAB' : delimiter}"`);
   
   const rawHeaders = parseCSVLine(firstLine, delimiter);
+  console.log('📋 En-têtes bruts extraits:', rawHeaders.slice(0, 8), rawHeaders.length > 8 ? `... (+${rawHeaders.length - 8} autres)` : '');
+  
   const normalizeHeader = (h: string) =>
     h
       .replace(/^\uFEFF/, '')
@@ -577,20 +722,35 @@ function parseCSV(csvContent: string): any[] {
       .replace(/__+/g, '_')
       .replace(/^_|_$/g, '');
   const headers = rawHeaders.map(normalizeHeader);
+  console.log('📋 En-têtes normalisés:', headers.slice(0, 8), headers.length > 8 ? `... (+${headers.length - 8} autres)` : '');
+  
   const transactions: any[] = [];
+  let parseErrors = 0;
 
   for (let i = 1; i < lines.length; i++) {
-    const values = parseCSVLine(lines[i], delimiter);
-    const transaction: any = {};
-    
-    headers.forEach((header, index) => {
-      const value = values[index] ?? '';
-      transaction[header] = typeof value === 'string' ? value.trim() : value;
-    });
-    
-    transactions.push(transaction);
+    try {
+      const values = parseCSVLine(lines[i], delimiter);
+      const transaction: any = {};
+      
+      headers.forEach((header, index) => {
+        const value = values[index] ?? '';
+        transaction[header] = typeof value === 'string' ? value.trim() : value;
+      });
+      
+      transactions.push(transaction);
+    } catch (error) {
+      parseErrors++;
+      if (parseErrors <= 3) {
+        console.log(`⚠️ Erreur parsing ligne ${i + 1}:`, error);
+      }
+    }
   }
 
+  if (parseErrors > 0) {
+    console.log(`⚠️ Total erreurs de parsing: ${parseErrors} lignes`);
+  }
+
+  console.log(`✅ CSV parsé avec succès: ${transactions.length} transactions, ${parseErrors} erreurs`);
   return transactions;
 }
 
