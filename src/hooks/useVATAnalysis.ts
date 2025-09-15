@@ -3,6 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useClientVATReports } from '@/hooks/useClientVATReports';
 import { processVATWithNewRules, DetailedVATReport } from '@/utils/newVATRulesEngine';
+import { processVATWithYAMLRules } from '@/utils/yamlVATEngine';
 import { processAmazonVATReport } from '@/utils/amazonVATEngine';
 
 export interface AnalysisResult {
@@ -86,12 +87,12 @@ export const useVATAnalysis = () => {
           console.warn('⚠️ Erreur ingestion automatique Activité (non bloquante):', error);
         });
 
-      // Essai avec le moteur automatique d'abord
-      const automaticReport = processVATWithNewRules(fileContent);
+      // Essai avec le nouveau moteur YAML conforme aux spécifications
+      const yamlReport = processVATWithYAMLRules(fileContent);
 
-      if (Array.isArray(automaticReport.breakdown) && automaticReport.breakdown.length > 0) {
-        // Succès avec le moteur automatique
-        const reportId = await saveReport(automaticReport, `Analyse ${fileName}`, fileId, clientId);
+      if (Array.isArray(yamlReport.breakdown) && yamlReport.breakdown.length > 0) {
+        // Succès avec le moteur YAML
+        const reportId = await saveReport(yamlReport, `Analyse ${fileName}`, fileId, clientId);
         
         if (updateFileStatus) {
           await updateFileStatus(fileId, 'completed');
@@ -99,7 +100,7 @@ export const useVATAnalysis = () => {
 
         toast({
           title: "Analyse terminée",
-          description: `${automaticReport.breakdown.length} pays analysés avec succès.`,
+          description: `${yamlReport.breakdown.length} pays analysés avec succès.`,
         });
 
         // Refresh immédiat des rapports
@@ -107,7 +108,7 @@ export const useVATAnalysis = () => {
 
         return {
           success: true,
-          data: automaticReport,
+          data: yamlReport,
           reportId
         };
       } else {
@@ -121,7 +122,7 @@ export const useVATAnalysis = () => {
 
         toast({
           title: "Analyse terminée (fallback)",
-          description: "Moteur automatique n'a rien détecté, bascule vers le moteur legacy effectuée.",
+          description: "Le moteur YAML n'a rien détecté, bascule vers le moteur legacy effectuée.",
         });
 
         // Refresh immédiat des rapports

@@ -12,7 +12,7 @@ import { VATBreakdown } from './VATBreakdown';
 import { NewVATBreakdown } from './NewVATBreakdown';
 import { VATAnalyticsCharts } from './VATAnalyticsCharts';
 import { RulesConfig } from './RulesConfig';
-import { processVATWithNewRules } from '@/utils/newVATRulesEngine';
+import { processVATWithYAMLRules } from '@/utils/yamlVATEngine';
 import { processAmazonVATReport } from '@/utils/amazonVATEngine';
 import * as XLSX from 'xlsx';
 
@@ -96,8 +96,8 @@ const UploadSection = () => {
       const text = await file.text();
       
       if (useAutomaticEngine) {
-        // Use new engine
-        const report = processVATWithNewRules(text);
+        // Use new YAML engine
+        const report = processVATWithYAMLRules(text);
 
         if (Array.isArray(report.breakdown) && report.breakdown.length > 0) {
           setNewVatData(report);
