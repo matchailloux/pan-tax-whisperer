@@ -139,19 +139,14 @@ const UploadSection = () => {
             description: `${report?.breakdown?.length ?? 0} pays analysés${forceYAML ? ' • mode forcé' : ''}.`,
           });
         } else {
-          // Fallback automatique vers le moteur legacy si rien n'est détecté
-          const breakdown = processVATWithNewYAMLRules(text);
-          setVatBreakdown(breakdown);
-          setNewVatData(null);
-
+          // Pas de fallback: signaler l'erreur et ne pas enregistrer un faux rapport
           if (fileId) {
-            await saveReport(breakdown, `Analyse ${file.name} (fallback)`, fileId);
-            await updateFileStatus(fileId, 'completed');
+            await updateFileStatus(fileId, 'error');
           }
-
           toast({
-            title: 'Analyse terminée (fallback)',
-            description: "Le moteur automatique n'a rien détecté, bascule vers le moteur legacy effectuée.",
+            title: "Aucune transaction reconnue",
+            description: "Impossible d'identifier SALE/REFUND. Vérifiez les colonnes TYPE/EVENT de votre CSV Amazon.",
+            variant: "destructive",
           });
         }
       } else {

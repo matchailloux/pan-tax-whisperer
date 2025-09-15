@@ -448,6 +448,24 @@ function extractRawTxType(tx: any): string {
       return String(tx[key]).toUpperCase().trim();
     }
   }
+  // Fallback robuste: scanner toutes les colonnes "type"/"évènement" pour repérer SALE/REFUND (multi-langues)
+  const refundRe = /(REFUND|REFUNDS|RETURN|REVERSAL|CREDIT|REMBOURSEMENT|RETOUR|AVOIR)/i;
+  const saleRe = /(SALE|SALES|SHIPMENT|ORDER|CHARGE|DEBIT|VENTE|EXPEDITION|COMMANDE)/i;
+  for (const [k, v] of Object.entries(tx)) {
+    const ku = k.toUpperCase();
+    if (/(TYPE|TRANSA|EVENT|OPERATION|EVENEMENT)/.test(ku)) {
+      const val = String(v || '').toUpperCase();
+      if (!val) continue;
+      if (refundRe.test(val)) return 'REFUND';
+      if (saleRe.test(val)) return 'SALE';
+    }
+  }
+  // Dernier recours: chercher la valeur dans n'importe quelle colonne si très explicite
+  for (const v of Object.values(tx)) {
+    const val = String(v || '').toUpperCase();
+    if (refundRe.test(val)) return 'REFUND';
+    if (saleRe.test(val)) return 'SALE';
+  }
   return '';
 }
 
