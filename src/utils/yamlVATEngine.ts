@@ -771,22 +771,31 @@ function parseCSVLine(line: string, delimiter: string): string[] {
   const result: string[] = [];
   let current = '';
   let inQuotes = false;
-  
+
   for (let i = 0; i < line.length; i++) {
     const char = line[i];
-    
-    if (char === '"' && (i === 0 || line[i-1] === delimiter)) {
-      inQuotes = true;
-    } else if (char === '"' && inQuotes && (i === line.length - 1 || line[i+1] === delimiter)) {
-      inQuotes = false;
-    } else if (char === delimiter && !inQuotes) {
+
+    if (char === '"') {
+      // Handle escaped double quotes inside quoted field
+      if (inQuotes && i + 1 < line.length && line[i + 1] === '"') {
+        current += '"';
+        i++; // skip the escaped quote
+      } else {
+        // toggle quoted state, do not add the quote character
+        inQuotes = !inQuotes;
+      }
+      continue;
+    }
+
+    if (char === delimiter && !inQuotes) {
       result.push(current.trim());
       current = '';
-    } else {
-      current += char;
+      continue;
     }
+
+    current += char;
   }
-  
+
   result.push(current.trim());
   return result;
 }
