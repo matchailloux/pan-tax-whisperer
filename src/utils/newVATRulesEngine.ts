@@ -145,8 +145,9 @@ function preprocessTransactions(rawTransactions: any[]): ProcessedVATTransaction
 
   const normalizeTxType = (type: string): 'SALE' | 'REFUND' | '' => {
     const t = (type || '').toUpperCase().trim();
-    if (['SALE', 'SALES', 'VENTE'].includes(t)) return 'SALE';
-    if (['REFUND', 'REFUNDS', 'REMBOURSEMENT', 'RETURN', 'CREDIT', 'CREDIT_NOTE'].includes(t)) return 'REFUND';
+    // YAML spécifie exactement "SALE" et "REFUND"
+    if (t === 'SALE') return 'SALE';
+    if (t === 'REFUND') return 'REFUND';
     return '';
   };
 
@@ -325,7 +326,8 @@ function classifyTransaction(transaction: ProcessedVATTransaction): VentilationR
     return { country: arrival, vatType: 'SUISSE' };
   }
   
-  // 6) Autre (tout le reste)
+  // 6) Résidu (tout le reste qui n'entre dans aucune des 5 catégories ci-dessus)
+  // Selon YAML: exclude_rules des 5 autres catégories
   const fallbackCountry = depart || arrival || 'UNKNOWN';
   if (fallbackCountry !== 'UNKNOWN') {
     return { country: fallbackCountry, vatType: 'RESIDUEL' };
