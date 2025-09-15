@@ -285,6 +285,8 @@ interface ProcessedTransaction {
   ARRIVAL: string;
   DEPART: string;
   BUYER_VAT: string;
+  VAT_AMOUNT: number; // Ajout de la TVA réelle
+  TOTAL_ACTIVITY_VALUE_VAT_AMT?: number; // Colonne originale du CSV
 }
 
 interface RuleResult {
@@ -650,6 +652,9 @@ for (const tx of transactions) {
     buyerVat = '';
   }
 
+  // Extraire la TVA réelle du CSV
+  const vatAmount = parseAmount(tx.TOTAL_ACTIVITY_VALUE_VAT_AMT || tx.VAT_AMT || tx.vat_amount || '0');
+
   processed.push({
     TX_TYPE: txType,
     AMOUNT_RAW: amountRaw,
@@ -657,7 +662,9 @@ for (const tx of transactions) {
     SCHEME: scheme,
     ARRIVAL: arrival,
     DEPART: depart,
-    BUYER_VAT: buyerVat
+    BUYER_VAT: buyerVat,
+    VAT_AMOUNT: vatAmount,
+    TOTAL_ACTIVITY_VALUE_VAT_AMT: vatAmount
   });
 }
 

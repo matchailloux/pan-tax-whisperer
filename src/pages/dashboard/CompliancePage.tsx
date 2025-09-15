@@ -287,6 +287,77 @@ const CompliancePage = () => {
         </Card>
       </div>
 
+      {/* Rapport spécialisé pour pays ciblés */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <TrendingUp className="h-5 w-5" />
+            Rapport TVA - Pays Ciblés
+          </CardTitle>
+          <CardDescription>
+            France, Espagne, Allemagne, Italie + TVA OSS totale
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
+            {/* France */}
+            <Card className="p-4">
+              <div className="text-sm font-medium text-muted-foreground">FRANCE</div>
+              <div className="text-2xl font-bold text-blue-600">
+                {formatCurrency(complianceData.find(d => d.country === 'FR')?.vatDue || 0)}
+              </div>
+              <div className="text-xs text-muted-foreground mt-1">
+                {complianceData.find(d => d.country === 'FR')?.transactions || 0} transactions
+              </div>
+            </Card>
+
+            {/* Espagne */}
+            <Card className="p-4">
+              <div className="text-sm font-medium text-muted-foreground">ESPAGNE</div>
+              <div className="text-2xl font-bold text-orange-600">
+                {formatCurrency(complianceData.find(d => d.country === 'ES')?.vatDue || 0)}
+              </div>
+              <div className="text-xs text-muted-foreground mt-1">
+                {complianceData.find(d => d.country === 'ES')?.transactions || 0} transactions
+              </div>
+            </Card>
+
+            {/* Allemagne */}
+            <Card className="p-4">
+              <div className="text-sm font-medium text-muted-foreground">ALLEMAGNE</div>
+              <div className="text-2xl font-bold text-red-600">
+                {formatCurrency(complianceData.find(d => d.country === 'DE')?.vatDue || 0)}
+              </div>
+              <div className="text-xs text-muted-foreground mt-1">
+                {complianceData.find(d => d.country === 'DE')?.transactions || 0} transactions
+              </div>
+            </Card>
+
+            {/* Italie */}
+            <Card className="p-4">
+              <div className="text-sm font-medium text-muted-foreground">ITALIE</div>
+              <div className="text-2xl font-bold text-green-600">
+                {formatCurrency(complianceData.find(d => d.country === 'IT')?.vatDue || 0)}
+              </div>
+              <div className="text-xs text-muted-foreground mt-1">
+                {complianceData.find(d => d.country === 'IT')?.transactions || 0} transactions
+              </div>
+            </Card>
+
+            {/* TVA OSS Totale */}
+            <Card className="p-4 bg-gradient-to-br from-purple-50 to-pink-50 border-purple-200">
+              <div className="text-sm font-medium text-purple-600">TVA OSS TOTALE</div>
+              <div className="text-2xl font-bold text-purple-700">
+                {formatCurrency(totals.ossAmount)}
+              </div>
+              <div className="text-xs text-purple-600 mt-1">
+                Régime OSS/IOSS
+              </div>
+            </Card>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Compliance Table */}
       <Card>
         <CardHeader>
@@ -295,7 +366,7 @@ const CompliancePage = () => {
             Détail par juridiction
           </CardTitle>
           <CardDescription>
-            Montants de TVA redevables par pays et régime
+            Montants de TVA redevables par pays et régime (calculés depuis TOTAL_ACTIVITY_VALUE_VAT_AMT)
           </CardDescription>
         </CardHeader>
         <CardContent>

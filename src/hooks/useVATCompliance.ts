@@ -65,25 +65,16 @@ export const useVATCompliance = () => {
         });
       }
 
-      // 2. Extraire la TVA réelle depuis les transactions brutes du CSV
-      // Le moteur YAML stocke les transactions analysées dans le rapport
-      if (report.report_data?.rawTransactions || report.report_data?.processedTransactions) {
-        const transactions = report.report_data.rawTransactions || report.report_data.processedTransactions || [];
+      // 2. Extraire la TVA réelle depuis les transactions processées du moteur YAML
+      if (report.report_data?.processedTransactions) {
+        const transactions = report.report_data.processedTransactions || [];
         
         transactions.forEach((transaction: any) => {
-          // Chercher la colonne TVA dans différents formats possibles
-          const vatAmount = transaction.TOTAL_ACTIVITY_VALUE_VAT_AMT || 
-                           transaction.VAT_AMT || 
-                           transaction.vat_amount ||
-                           transaction.vatAmount ||
-                           0;
+          // La TVA réelle est maintenant disponible dans VAT_AMOUNT
+          const vatAmount = transaction.VAT_AMOUNT || 0;
+          const country = transaction.ARRIVAL || 'UNKNOWN';
 
-          const country = transaction.SALE_ARRIVAL_COUNTRY || 
-                         transaction.ARRIVAL || 
-                         transaction.arrival_country ||
-                         'UNKNOWN';
-
-          if (country && country !== 'UNKNOWN' && vatAmount) {
+          if (country && country !== 'UNKNOWN' && vatAmount > 0) {
             const existing = countryData.get(country) || {
               salesAmount: 0,
               vatCollected: 0,
@@ -94,8 +85,8 @@ export const useVATCompliance = () => {
               rawTransactions: []
             };
 
-            // Additionner la TVA réelle du CSV
-            existing.vatCollected += Math.abs(parseFloat(vatAmount) || 0);
+            // Additionner la TVA réelle du CSV (toujours en valeur absolue)
+            existing.vatCollected += Math.abs(vatAmount);
             existing.transactions += 1;
             existing.rawTransactions.push(transaction);
 
