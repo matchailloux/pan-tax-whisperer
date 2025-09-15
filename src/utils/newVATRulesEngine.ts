@@ -92,6 +92,9 @@ export function processVATWithNewRules(csvContent: string): DetailedVATReport {
   let transactions = parseAmazonCSV(csvContent);
   console.log(`📊 ${transactions.length} transactions parsées`);
   
+  // Debug: afficher les 3 premières transactions avant preprocessing
+  console.log('🔍 Échantillon transactions avant preprocessing:', transactions.slice(0, 3));
+  
   // Étape 2: Preprocessing selon les spécifications YAML v1
   transactions = preprocessTransactions(transactions);
   console.log(`🔧 ${transactions.length} transactions après preprocessing`);
@@ -169,10 +172,17 @@ function preprocessTransactions(rawTransactions: any[]): ProcessedVATTransaction
 
   const cleaned = rawTransactions
     .filter(transaction => {
-      // Ne jetez pas tout par défaut: on conserve si type connu OU si un montant existe
+      // Debug: vérifier les types de transaction
       const tx = normalizeTxType(getFirst(transaction, txTypeKeys, ''));
-      if (tx) return true;
       const rawAmount = getFirst(transaction, amountKeys, '');
+      console.log('🔍 Transaction example:', { 
+        txType: tx, 
+        rawType: getFirst(transaction, txTypeKeys, ''),
+        amount: rawAmount,
+        scheme: getFirst(transaction, schemeKeys, '')
+      });
+      // Ne jetez pas tout par défaut: on conserve si type connu OU si un montant existe
+      if (tx) return true;
       return rawAmount !== '' && rawAmount !== undefined;
     })
     .map(transaction => {
