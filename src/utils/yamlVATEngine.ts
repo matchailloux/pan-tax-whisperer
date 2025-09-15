@@ -140,14 +140,14 @@ function preprocessYAML(rawTransactions: any[]): ProcessedTransaction[] {
   
   // Helpers
   const normalizeTxType = (val: string): 'SALE' | 'REFUND' | '' => {
-    const t = (val || '').toUpperCase().trim();
+    const t = (val || '').replace(/"/g, '').toUpperCase().trim();
     if (t === 'SALE' || t === 'SALES' || t === 'VENTE') return 'SALE';
     if (t === 'REFUND' || t === 'REFUNDS' || t === 'REMBOURSEMENT' || t === 'RETURN' || t === 'CREDIT' || t === 'CREDIT_NOTE') return 'REFUND';
     return '';
   };
 
   const normalizeScheme = (val: string): string => {
-    const s = (val || '').toUpperCase().trim().replace(/\s+/g, '-');
+    const s = (val || '').replace(/"/g, '').toUpperCase().trim().replace(/\s+/g, '-');
     if (['UNION-OSS', 'EU-OSS', 'OSS'].includes(s)) return 'UNION-OSS';
     if (['REGULAR', 'DOMESTIC', 'LOCAL'].includes(s)) return 'REGULAR';
     if (['CH-VOEC', 'CH_VOEC', 'VOEC'].includes(s)) return 'CH_VOEC';
@@ -307,7 +307,7 @@ function preprocessYAML(rawTransactions: any[]): ProcessedTransaction[] {
  * Normalisation des codes pays (vers codes ISO-2)
  */
 function normalizeCountryCode(countryString: string): string {
-  const country = (countryString || '').trim().toUpperCase();
+  const country = (countryString || '').replace(/"/g, '').trim().toUpperCase();
   const mapping: { [key: string]: string } = {
     'GERMANY': 'DE', 'FRANCE': 'FR', 'ITALY': 'IT', 'SPAIN': 'ES', 'NETHERLANDS': 'NL', 'POLAND': 'PL', 'SWEDEN': 'SE', 'BELGIUM': 'BE',
     'AUSTRIA': 'AT', 'CZECH REPUBLIC': 'CZ', 'CZECHIA': 'CZ', 'DENMARK': 'DK', 'FINLAND': 'FI', 'GREECE': 'GR', 'HUNGARY': 'HU', 'IRELAND': 'IE',
@@ -747,7 +747,29 @@ function parseCSV(csvContent: string): any[] {
       
       headers.forEach((header, index) => {
         const value = values[index] ?? '';
-        transaction[header] = typeof value === 'string' ? value.trim() : value;
+        if (typeof value === 'string') {
+          let s = value.trim();
+          // Supprimer guillemets d'encadrement et dé-doubler les quotes
+          // Plusieurs passes au cas où
+          for (let k = 0; k < 2; k++) {
+            s = s.replace(/^"+|"+$/g, '');
+          }
+          s = s.replace(/""/g, '"');
+          transaction[header] = s;
+        } else {
+          transaction[header] = value;
+        }
+      });
+      
+      // Sanitize global sur toutes les colonnes (sécurité)
+      Object.keys(transaction).forEach(key => {
+        const v = transaction[key];
+        if (typeof v === 'string') {
+          let s = v.trim();
+          for (let k = 0; k < 2; k++) s = s.replace(/^"+|"+$/g, '');
+          s = s.replace(/""/g, '"');
+          transaction[key] = s;
+        }
       });
       
       transactions.push(transaction);
