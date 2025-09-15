@@ -43,6 +43,7 @@ export interface DetailedVATReport {
     totalProcessed: number;
   };
   rawTransactions?: any[]; // Transactions brutes pour le module Compliance
+  processedTransactions?: ProcessedTransaction[]; // Transactions traitées avec TVA
 }
 
 // Configuration YAML intégrée
@@ -294,7 +295,9 @@ interface RuleResult {
   label: string;
   sum?: number;
   count?: number;
+  vatSum?: number;
   byCountry?: { [country: string]: number };
+  vatByCountry?: { [country: string]: number };
 }
 
 export function processVATWithNewYAMLRules(csvContent: string): DetailedVATReport {
@@ -354,7 +357,8 @@ export function processVATWithNewYAMLRules(csvContent: string): DetailedVATRepor
         suisseRules: ruleResults['suisse_total']?.count || 0,
         residuelRules: ruleResults['residu_total']?.count || 0,
         totalProcessed: processedTransactions.length
-      }
+      },
+      processedTransactions: processedTransactions // Ajouter les transactions traitées pour le module Compliance
     };
 
   } catch (error) {
@@ -743,13 +747,15 @@ function applyRules(transactions: ProcessedTransaction[]): { [ruleId: string]: R
     id: 'oss_total',
     label: 'OSS - Total',
     sum: ossTransactions.reduce((sum, tx) => sum + tx.AMOUNT_SIGNED, 0),
-    count: ossTransactions.length
+    count: ossTransactions.length,
+    vatSum: ossTransactions.reduce((sum, tx) => sum + Math.abs(tx.VAT_AMOUNT), 0)
   };
 
   results['oss_by_country'] = {
     id: 'oss_by_country',
     label: 'OSS - Par pays (arrivée)',
-    byCountry: groupByCountry(ossTransactions, 'ARRIVAL')
+    byCountry: groupByCountry(ossTransactions, 'ARRIVAL'),
+    vatByCountry: groupVATByCountry(ossTransactions, 'ARRIVAL')
   };
 
   // 2. B2C rules (REGULAR + empty BUYER_VAT)
@@ -760,13 +766,15 @@ function applyRules(transactions: ProcessedTransaction[]): { [ruleId: string]: R
     id: 'b2c_total',
     label: 'Domestique B2C - Total',
     sum: b2cTransactions.reduce((sum, tx) => sum + tx.AMOUNT_SIGNED, 0),
-    count: b2cTransactions.length
+    count: b2cTransactions.length,
+    vatSum: b2cTransactions.reduce((sum, tx) => sum + Math.abs(tx.VAT_AMOUNT), 0)
   };
 
   results['b2c_by_country'] = {
     id: 'b2c_by_country',
     label: 'Domestique B2C - Par pays (départ)',
-    byCountry: groupByCountry(b2cTransactions, 'DEPART')
+    byCountry: groupByCountry(b2cTransactions, 'DEPART'),
+    vatByCountry: groupVATByCountry(b2cTransactions, 'DEPART')
   };
 
   // 3. B2B domestic rules (REGULAR + BUYER_VAT === DEPART)
@@ -777,13 +785,15 @@ function applyRules(transactions: ProcessedTransaction[]): { [ruleId: string]: R
     id: 'b2b_dom_total',
     label: 'Domestique B2B - Total',
     sum: b2bTransactions.reduce((sum, tx) => sum + tx.AMOUNT_SIGNED, 0),
-    count: b2bTransactions.length
+    count: b2bTransactions.length,
+    vatSum: b2bTransactions.reduce((sum, tx) => sum + Math.abs(tx.VAT_AMOUNT), 0)
   };
 
   results['b2b_dom_by_country'] = {
     id: 'b2b_dom_by_country',
     label: 'Domestique B2B - Par pays (départ)',
-    byCountry: groupByCountry(b2bTransactions, 'DEPART')
+    byCountry: groupByCountry(b2bTransactions, 'DEPART'),
+    vatByCountry: groupVATByCountry(b2bTransactions, 'DEPART')
   };
 
   // 4. Intracommunautaire rules (REGULAR + BUYER_VAT !== DEPART + BUYER_VAT not empty)
@@ -794,13 +804,15 @@ function applyRules(transactions: ProcessedTransaction[]): { [ruleId: string]: R
     id: 'intra_total',
     label: 'Intracommunautaire - Total',
     sum: intraTransactions.reduce((sum, tx) => sum + tx.AMOUNT_SIGNED, 0),
-    count: intraTransactions.length
+    count: intraTransactions.length,
+    vatSum: intraTransactions.reduce((sum, tx) => sum + Math.abs(tx.VAT_AMOUNT), 0)
   };
 
   results['intra_by_country'] = {
     id: 'intra_by_country',
     label: 'Intracommunautaire - Par pays (départ)',
-    byCountry: groupByCountry(intraTransactions, 'DEPART')
+    byCountry: groupByCountry(intraTransactions, 'DEPART'),
+    vatByCountry: groupVATByCountry(intraTransactions, 'DEPART')
   };
 
   // 5. Suisse rules
@@ -809,13 +821,15 @@ function applyRules(transactions: ProcessedTransaction[]): { [ruleId: string]: R
     id: 'suisse_total',
     label: 'Suisse (VOEC) - Total',
     sum: suisseTransactions.reduce((sum, tx) => sum + tx.AMOUNT_SIGNED, 0),
-    count: suisseTransactions.length
+    count: suisseTransactions.length,
+    vatSum: suisseTransactions.reduce((sum, tx) => sum + Math.abs(tx.VAT_AMOUNT), 0)
   };
 
   results['suisse_by_country'] = {
     id: 'suisse_by_country',
     label: 'Suisse (VOEC) - Par pays (arrivée)',
-    byCountry: groupByCountry(suisseTransactions, 'ARRIVAL')
+    byCountry: groupByCountry(suisseTransactions, 'ARRIVAL'),
+    vatByCountry: groupVATByCountry(suisseTransactions, 'ARRIVAL')
   };
 
   // 6. Grand total
@@ -862,6 +876,19 @@ function groupByCountry(transactions: ProcessedTransaction[], countryField: 'ARR
     const country = tx[countryField];
     if (country) {
       grouped[country] = (grouped[country] || 0) + tx.AMOUNT_SIGNED;
+    }
+  }
+  
+  return grouped;
+}
+
+function groupVATByCountry(transactions: ProcessedTransaction[], countryField: 'ARRIVAL' | 'DEPART'): { [country: string]: number } {
+  const grouped: { [country: string]: number } = {};
+  
+  for (const tx of transactions) {
+    const country = tx[countryField];
+    if (country) {
+      grouped[country] = (grouped[country] || 0) + Math.abs(tx.VAT_AMOUNT);
     }
   }
   

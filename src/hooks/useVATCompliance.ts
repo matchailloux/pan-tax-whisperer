@@ -23,72 +23,63 @@ export const useVATCompliance = () => {
 
     const countryData = new Map<string, {
       salesAmount: number;
-      vatCollected: number; // TVA réelle du CSV
-      vatCalculated: number; // TVA calculée par notre moteur
+      vatCollected: number;
       regimes: Set<string>;
       isOSS: boolean;
       transactions: number;
-      rawTransactions: any[]; // Pour debug
     }>();
 
     // Analyser tous les rapports pour extraire les données de compliance
     reports.forEach(report => {
-      // 1. Analyser la ventilation par pays du moteur YAML
-      if (report.report_data?.breakdown) {
-        report.report_data.breakdown.forEach((countryBreakdown: any) => {
-          const country = countryBreakdown.country;
-          const existing = countryData.get(country) || {
-            salesAmount: 0,
-            vatCollected: 0,
-            vatCalculated: 0,
-            regimes: new Set<string>(),
-            isOSS: false,
-            transactions: 0,
-            rawTransactions: []
-          };
-
-          // Montants de ventes (HT)
-          existing.salesAmount += countryBreakdown.total || 0;
-          
-          // Déterminer les régimes
-          if (countryBreakdown.oss > 0) {
-            existing.regimes.add('OSS');
-            existing.isOSS = true;
-          }
-          if (countryBreakdown.domesticB2C > 0) existing.regimes.add('B2C National');
-          if (countryBreakdown.domesticB2B > 0) existing.regimes.add('B2B National');
-          if (countryBreakdown.intracommunautaire > 0) existing.regimes.add('Intracommunautaire');
-          if (countryBreakdown.suisse > 0) existing.regimes.add('Suisse');
-          if (countryBreakdown.residuel > 0) existing.regimes.add('Résiduel');
-
-          countryData.set(country, existing);
-        });
-      }
-
-      // 2. Extraire la TVA réelle depuis les transactions processées du moteur YAML
+      // Utiliser les données déjà calculées par le moteur de règles
       if (report.report_data?.processedTransactions) {
         const transactions = report.report_data.processedTransactions || [];
         
+        // Grouper les transactions par pays et régime pour calculer la TVA due
         transactions.forEach((transaction: any) => {
-          // La TVA réelle est maintenant disponible dans VAT_AMOUNT
-          const vatAmount = transaction.VAT_AMOUNT || 0;
-          const country = transaction.ARRIVAL || 'UNKNOWN';
+          const vatAmount = Math.abs(transaction.VAT_AMOUNT || 0);
+          const salesAmount = transaction.AMOUNT_SIGNED || 0;
+          
+          // Déterminer le pays et le régime selon les règles du moteur
+          let country = '';
+          const regimes = new Set<string>();
+          let isOSS = false;
 
-          if (country && country !== 'UNKNOWN' && vatAmount > 0) {
+          if (transaction.SCHEME === 'UNION-OSS') {
+            country = transaction.ARRIVAL;
+            regimes.add('OSS');
+            isOSS = true;
+          } else if (transaction.SCHEME === 'REGULAR') {
+            country = transaction.DEPART;
+            
+            if (!transaction.BUYER_VAT) {
+              regimes.add('B2C National');
+            } else if (transaction.BUYER_VAT === transaction.DEPART) {
+              regimes.add('B2B National');
+            } else {
+              regimes.add('Intracommunautaire');
+            }
+          } else if (transaction.SCHEME === 'CH_VOEC') {
+            country = transaction.ARRIVAL;
+            regimes.add('Suisse');
+          }
+
+          if (country && (vatAmount > 0 || salesAmount !== 0)) {
             const existing = countryData.get(country) || {
               salesAmount: 0,
               vatCollected: 0,
-              vatCalculated: 0,
               regimes: new Set<string>(),
               isOSS: false,
-              transactions: 0,
-              rawTransactions: []
+              transactions: 0
             };
 
-            // Additionner la TVA réelle du CSV (toujours en valeur absolue)
-            existing.vatCollected += Math.abs(vatAmount);
+            existing.salesAmount += salesAmount;
+            existing.vatCollected += vatAmount;
             existing.transactions += 1;
-            existing.rawTransactions.push(transaction);
+            
+            // Fusionner les régimes
+            regimes.forEach(regime => existing.regimes.add(regime));
+            if (isOSS) existing.isOSS = true;
 
             countryData.set(country, existing);
           }
