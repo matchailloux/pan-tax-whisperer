@@ -485,9 +485,23 @@ function preprocessTransactions(transactions: any[]): ProcessedTransaction[] {
   const seenTypes = new Map<string, number>();
 
 for (const tx of transactions) {
-  const rawType = extractRawTxType(tx);
-  seenTypes.set(rawType || '(VIDE)', (seenTypes.get(rawType || '(VIDE)') || 0) + 1);
-  const txType = normalizeTxType(rawType);
+  // Priorité: filtrer directement via la colonne TRANSACTION_TYPE si elle existe
+  let txType: 'SALE' | 'REFUND' | 'OTHER';
+  const rawFromColumn = (tx as any).TRANSACTION_TYPE !== undefined && (tx as any).TRANSACTION_TYPE !== null
+    ? String((tx as any).TRANSACTION_TYPE).toUpperCase().trim()
+    : '';
+
+  if (rawFromColumn) {
+    // Ne garder strictement que SALE ou REFUND si la colonne est présente
+    seenTypes.set(rawFromColumn || '(VIDE)', (seenTypes.get(rawFromColumn || '(VIDE)') || 0) + 1);
+    txType = rawFromColumn === 'SALE' || rawFromColumn === 'REFUND' ? (rawFromColumn as 'SALE' | 'REFUND') : 'OTHER';
+  } else {
+    // Fallback: heuristiques multi-colonnes (legacy)
+    const rawType = extractRawTxType(tx);
+    seenTypes.set(rawType || '(VIDE)', (seenTypes.get(rawType || '(VIDE)') || 0) + 1);
+    txType = normalizeTxType(rawType);
+  }
+
   if (txType === 'OTHER') continue;
 
   // Montant brut: essayer de nombreuses variantes Amazon
