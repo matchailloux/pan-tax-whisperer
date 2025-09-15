@@ -134,9 +134,9 @@ export function processVATWithNewRules(csvContent: string): DetailedVATReport {
 function preprocessTransactions(rawTransactions: any[]): ProcessedVATTransaction[] {
   return rawTransactions
     .filter(transaction => {
-      // Étape 2: Ne garder que SALE/SALES/REFUND
+      // Étape 2: Ne garder que SALE/SALES/REFUND (ajout de variantes courantes)
       const txType = (transaction['TRANSACTION_TYPE'] || '').toUpperCase().trim();
-      return ['SALE', 'SALES', 'REFUND'].includes(txType);
+      return ['SALE', 'SALES', 'REFUND', 'REFUNDS', 'VENTE', 'REMBOURSEMENT'].includes(txType);
     })
     .map(transaction => {
       const processed: ProcessedVATTransaction = {};
