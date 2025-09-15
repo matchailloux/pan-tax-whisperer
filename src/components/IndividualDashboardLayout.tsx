@@ -42,7 +42,7 @@ const individualMenuItems = [
     icon: FileText,
   },
   {
-    title: "Analyse TVA",
+    title: "Ventes par Régime",
     url: "/dashboard/analysis",
     icon: BarChart3,
   },

@@ -9,7 +9,7 @@ const AnalysisPage = () => {
         <div className="max-w-7xl mx-auto">
           <div className="text-center space-y-3">
             <h1 className="text-4xl font-bold bg-gradient-primary bg-clip-text text-transparent">
-              Analyse TVA Amazon
+              Montants HT par régime
             </h1>
             <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
               Analysez vos rapports TVA Amazon en quelques secondes avec notre moteur d'analyse intelligent
