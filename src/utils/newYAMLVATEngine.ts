@@ -432,24 +432,59 @@ function parseCSVLine(line: string, delimiter: string): string[] {
   return result.map(s => s.trim().replace(/^\uFEFF/, ''));
 }
 
+// Helpers pour extraire et normaliser le type de transaction depuis différentes colonnes Amazon
+function extractRawTxType(tx: any): string {
+  const candidateKeys = [
+    'TRANSACTION_TYPE',
+    'TRANSACTION_EVENT_TYPE',
+    'EVENT_TYPE',
+    'TYPE',
+    'ORDER_EVENT_TYPE',
+    'VAT_TRANSACTION_TYPE',
+    'TX_TYPE'
+  ];
+  for (const key of candidateKeys) {
+    if (tx[key] !== undefined && tx[key] !== null && String(tx[key]).trim() !== '') {
+      return String(tx[key]).toUpperCase().trim();
+    }
+  }
+  return '';
+}
+
+function normalizeTxType(value: string): 'SALE' | 'REFUND' | 'OTHER' {
+  const v = (value || '').toUpperCase();
+  if (!v) return 'OTHER';
+  // Mappage généreux basé sur les rapports Amazon
+  if (/(REFUND|REFUNDS|RETURN|REVERSAL|CREDIT)/.test(v)) return 'REFUND';
+  if (/(SALE|SALES|SHIPMENT|ORDER|CHARGE|DEBIT)/.test(v)) return 'SALE';
+  return 'OTHER';
+}
+
 function preprocessTransactions(transactions: any[]): ProcessedTransaction[] {
   const processed: ProcessedTransaction[] = [];
 
+  // Stat pour debug si rien ne passe
+  const seenTypes = new Map<string, number>();
+
   for (const tx of transactions) {
-    // Filter: only SALE and REFUND
-    const txType = (tx.TRANSACTION_TYPE || '').toUpperCase().trim();
-    if (txType !== 'SALE' && txType !== 'REFUND') continue;
+    const rawType = extractRawTxType(tx);
+    seenTypes.set(rawType || '(VIDE)', (seenTypes.get(rawType || '(VIDE)') || 0) + 1);
+    const txType = normalizeTxType(rawType);
+    if (txType === 'OTHER') continue;
 
-    // Extract and clean fields
-    const amountRaw = parseAmount(tx.TOTAL_ACTIVITY_VALUE_AMT_VAT_EXCL || '');
+    // Montant brut (essaye plusieurs variantes connues)
+    const amountRaw = parseAmount(
+      (tx.TOTAL_ACTIVITY_VALUE_AMT_VAT_EXCL ?? tx.AMOUNT_RAW ?? tx.TOTAL_ACTIVITY_VALUE_AMOUNT_VAT_EXCL ?? tx.TRANSACTION_VALUE_VAT_EXCL ?? '') as string
+    );
     const amountSigned = txType === 'REFUND' ? -Math.abs(amountRaw) : Math.abs(amountRaw);
-    
-    const scheme = (tx.TAX_REPORTING_SCHEME || '').toUpperCase().trim();
-    const arrival = normalizeCountry(tx.SALE_ARRIVAL_COUNTRY || '');
-    const depart = normalizeCountry(tx.SALE_DEPART_COUNTRY || '');
-    let buyerVat = normalizeCountry(tx.BUYER_VAT_NUMBER_COUNTRY || '');
 
-    // Normalize empty values for BUYER_VAT
+    // Champs normalisés avec fallback
+    const scheme = (tx.TAX_REPORTING_SCHEME ?? tx.SCHEME ?? '').toString().toUpperCase().trim();
+    const arrival = normalizeCountry((tx.SALE_ARRIVAL_COUNTRY ?? tx.ARRIVAL ?? '') as string);
+    const depart = normalizeCountry((tx.SALE_DEPART_COUNTRY ?? tx.DEPART ?? '') as string);
+    let buyerVat = normalizeCountry((tx.BUYER_VAT_NUMBER_COUNTRY ?? tx.BUYER_VAT ?? '') as string);
+
+    // Normaliser les vides (B2C)
     const emptyValues = ['', '(VIDE)', '(VIDES)', 'NULL', 'N/A', '-', '—', 'NONE', ' '];
     if (emptyValues.includes(buyerVat)) {
       buyerVat = '';
@@ -464,6 +499,10 @@ function preprocessTransactions(transactions: any[]): ProcessedTransaction[] {
       DEPART: depart,
       BUYER_VAT: buyerVat
     });
+  }
+
+  if (processed.length === 0) {
+    console.warn('⚠️ Aucune transaction retenue après preprocessing. Types vus:', Array.from(seenTypes.entries()));
   }
 
   return processed;
