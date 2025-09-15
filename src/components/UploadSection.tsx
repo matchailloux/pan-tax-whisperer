@@ -15,6 +15,7 @@ import { RulesConfig } from './RulesConfig';
 import { processVATWithYAMLRules } from '@/utils/yamlVATEngine';
 import { processAmazonVATReport } from '@/utils/amazonVATEngine';
 import * as XLSX from 'xlsx';
+import { DebugYAMLBar } from '@/components/DebugYAMLBar';
 
 const UploadSection = () => {
   const [isDragActive, setIsDragActive] = useState(false);
@@ -99,18 +100,44 @@ const UploadSection = () => {
         // Use new YAML engine
         const report = processVATWithYAMLRules(text);
 
-        if (Array.isArray(report.breakdown) && report.breakdown.length > 0) {
+        // Debug console: stats + aperçu résultat
+        try {
+          // Plusieurs clés possibles selon versions
+          const stats = (report as any)?.rulesStatistics ?? (report as any)?.rulesStats ?? null;
+          console.log('STATISTIQUES DE CLASSIFICATION YAML:', stats ?? 'indisponible');
+          console.log('RÉSULTAT FINAL YAML:', {
+            countries: Array.isArray((report as any)?.breakdown) ? (report as any).breakdown.length : 0,
+            kpis: Array.isArray((report as any)?.kpiCards) ? (report as any).kpiCards.length : 0,
+          });
+        } catch {}
+
+        // Mode debug: forcer l'utilisation du YAML même si breakdown vide
+        const forceYAML = (() => {
+          try {
+            const v = localStorage.getItem('debug:forceYAML');
+            return v === '1' || v === 'true';
+          } catch {
+            return false;
+          }
+        })();
+
+        if ((Array.isArray(report.breakdown) && report.breakdown.length > 0) || forceYAML) {
           setNewVatData(report);
           setVatBreakdown(null);
 
           if (fileId) {
-            await saveReport(report, `Analyse ${file.name}`, fileId);
+            const title = forceYAML && (!report.breakdown || report.breakdown.length === 0)
+              ? `Analyse ${file.name} (YAML forcé)`
+              : `Analyse ${file.name}`;
+            await saveReport(report, title, fileId);
             await updateFileStatus(fileId, 'completed');
           }
 
           toast({
-            title: "Analyse terminée",
-            description: `${report.breakdown.length} pays analysés avec succès et sauvegardé.`,
+            title: forceYAML && (!report.breakdown || report.breakdown.length === 0)
+              ? 'Analyse terminée (YAML forcé)'
+              : 'Analyse terminée',
+            description: `${report?.breakdown?.length ?? 0} pays analysés${forceYAML ? ' • mode forcé' : ''}.`,
           });
         } else {
           // Fallback automatique vers le moteur legacy si rien n'est détecté
@@ -124,7 +151,7 @@ const UploadSection = () => {
           }
 
           toast({
-            title: "Analyse terminée (fallback)",
+            title: 'Analyse terminée (fallback)',
             description: "Le moteur automatique n'a rien détecté, bascule vers le moteur legacy effectuée.",
           });
         }
@@ -223,6 +250,7 @@ const UploadSection = () => {
 
   return (
     <div className="space-y-8">
+      <DebugYAMLBar report={newVatData} />
       {/* Upload Area - Design épuré */}
       <Card className="border-2 border-dashed border-primary/20 bg-gradient-to-r from-primary/5 to-accent/5">
         <CardContent className="pt-6">

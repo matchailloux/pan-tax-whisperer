@@ -90,17 +90,44 @@ export const useVATAnalysis = () => {
       // Essai avec le nouveau moteur YAML conforme aux spécifications
       const yamlReport = processVATWithYAMLRules(fileContent);
 
-      if (Array.isArray(yamlReport.breakdown) && yamlReport.breakdown.length > 0) {
-        // Succès avec le moteur YAML
-        const reportId = await saveReport(yamlReport, `Analyse ${fileName}`, fileId, clientId);
+      // Debug console: stats + aperçu résultat
+      try {
+        // Plusieurs clés possibles selon versions
+        // @ts-ignore
+        const stats = (yamlReport as any)?.rulesStatistics ?? (yamlReport as any)?.rulesStats ?? null;
+        console.log('STATISTIQUES DE CLASSIFICATION YAML:', stats ?? 'indisponible');
+        console.log('RÉSULTAT FINAL YAML:', {
+          countries: Array.isArray((yamlReport as any)?.breakdown) ? (yamlReport as any).breakdown.length : 0,
+          kpis: Array.isArray((yamlReport as any)?.kpiCards) ? (yamlReport as any).kpiCards.length : 0,
+        });
+      } catch {}
+
+      // Mode debug: forcer l'utilisation du YAML même si vide
+      const forceYAML = (() => {
+        try {
+          const v = localStorage.getItem('debug:forceYAML');
+          return v === '1' || v === 'true';
+        } catch {
+          return false;
+        }
+      })();
+
+      if ((Array.isArray(yamlReport.breakdown) && yamlReport.breakdown.length > 0) || forceYAML) {
+        // Succès (ou YAML forcé)
+        const title = forceYAML && (!yamlReport.breakdown || yamlReport.breakdown.length === 0)
+          ? `Analyse ${fileName} (YAML forcé)`
+          : `Analyse ${fileName}`;
+        const reportId = await saveReport(yamlReport, title, fileId, clientId);
         
         if (updateFileStatus) {
           await updateFileStatus(fileId, 'completed');
         }
 
         toast({
-          title: "Analyse terminée",
-          description: `${yamlReport.breakdown.length} pays analysés avec succès.`,
+          title: forceYAML && (!yamlReport.breakdown || yamlReport.breakdown.length === 0)
+            ? 'Analyse terminée (YAML forcé)'
+            : 'Analyse terminée',
+          description: `${yamlReport?.breakdown?.length ?? 0} pays analysés${forceYAML ? ' • mode forcé' : ''}.`,
         });
 
         // Refresh immédiat des rapports
@@ -121,7 +148,7 @@ export const useVATAnalysis = () => {
         }
 
         toast({
-          title: "Analyse terminée (fallback)",
+          title: 'Analyse terminée (fallback)',
           description: "Le moteur YAML n'a rien détecté, bascule vers le moteur legacy effectuée.",
         });
 

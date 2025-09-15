@@ -8,6 +8,7 @@ import { useClientFiles } from '@/hooks/useClientFiles';
 import { useClientVATReports } from '@/hooks/useClientVATReports';
 import { useVATAnalysis } from '@/hooks/useVATAnalysis';
 import { useToast } from '@/hooks/use-toast';
+import { DebugYAMLBar } from '@/components/DebugYAMLBar';
 
 interface ClientUploadSectionProps {
   clientId: string;
@@ -95,6 +96,7 @@ const ClientUploadSection: React.FC<ClientUploadSectionProps> = ({ clientId, cli
 
   return (
     <div className="space-y-6">
+      <DebugYAMLBar />
       {/* Upload Section */}
       <Card>
         <CardHeader>
