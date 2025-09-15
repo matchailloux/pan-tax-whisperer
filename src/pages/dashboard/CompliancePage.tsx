@@ -28,14 +28,18 @@ import {
   Download
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { useVATCompliance } from '@/hooks/useVATCompliance';
+import { LoadingSpinner } from '@/components/LoadingSpinner';
 
 interface ComplianceData {
   jurisdiction: string;
   country: string;
   taxId: string;
-  monthlyVAT: number;
-  quarterlyVAT: number;
+  vatDue: number; // TVA due calculée depuis les données réelles
+  salesAmount: number; // Montant des ventes
+  vatCollected: number; // TVA collectée
   isOSS: boolean;
+  regime: string; // Type de régime (B2C, B2B, OSS, etc.)
   status: 'compliant' | 'warning' | 'overdue';
   nextDueDate: string;
 }
@@ -48,6 +52,7 @@ interface Period {
 
 const CompliancePage = () => {
   const { toast } = useToast();
+  const { complianceData, totals, loading, reportsCount } = useVATCompliance();
   const [selectedPeriod, setSelectedPeriod] = useState({
     month: new Date().getMonth() + 1,
     year: new Date().getFullYear(),
@@ -56,64 +61,12 @@ const CompliancePage = () => {
   
   const [viewMode, setViewMode] = useState<'monthly' | 'quarterly'>('monthly');
 
-  // Données simulées - à remplacer par de vraies données de la base
-  const complianceData: ComplianceData[] = [
-    {
-      jurisdiction: 'France',
-      country: 'FR',
-      taxId: 'FR12345678901',
-      monthlyVAT: 8500.50,
-      quarterlyVAT: 25501.50,
-      isOSS: false,
-      status: 'compliant',
-      nextDueDate: '2024-02-20'
-    },
-    {
-      jurisdiction: 'Germany',
-      country: 'DE', 
-      taxId: 'DE123456789',
-      monthlyVAT: 6200.30,
-      quarterlyVAT: 18600.90,
-      isOSS: false,
-      status: 'warning',
-      nextDueDate: '2024-02-10'
-    },
-    {
-      jurisdiction: 'European Union - VAT OSS / IOSS',
-      country: 'OSS',
-      taxId: 'EU372012345',
-      monthlyVAT: 12800.75,
-      quarterlyVAT: 38402.25,
-      isOSS: true,
-      status: 'compliant',
-      nextDueDate: '2024-01-31'
-    },
-    {
-      jurisdiction: 'Spain',
-      country: 'ES',
-      taxId: 'ES12345678A',
-      monthlyVAT: 3400.20,
-      quarterlyVAT: 10200.60,
-      isOSS: false,
-      status: 'overdue',
-      nextDueDate: '2024-01-20'
-    }
-  ];
 
   const months = [
     'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
     'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'
   ];
 
-  const totals = useMemo(() => {
-    const monthly = complianceData.reduce((sum, item) => sum + item.monthlyVAT, 0);
-    const quarterly = complianceData.reduce((sum, item) => sum + item.quarterlyVAT, 0);
-    const ossAmount = complianceData
-      .filter(item => item.isOSS)
-      .reduce((sum, item) => sum + (viewMode === 'monthly' ? item.monthlyVAT : item.quarterlyVAT), 0);
-    
-    return { monthly, quarterly, ossAmount };
-  }, [complianceData, viewMode]);
 
   const getStatusIcon = (status: string) => {
     switch (status) {
@@ -166,6 +119,10 @@ const CompliancePage = () => {
     });
   };
 
+  if (loading) {
+    return <LoadingSpinner />;
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -173,7 +130,7 @@ const CompliancePage = () => {
         <div>
           <h3 className="text-2xl font-bold tracking-tight">Compliance TVA</h3>
           <p className="text-muted-foreground">
-            Suivi des obligations TVA par juridiction
+            TVA due calculée depuis TOTAL_ACTIVITY_VALUE_VAT_AMT ({reportsCount} rapports • {totals.totalTransactions} transactions)
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -270,10 +227,10 @@ const CompliancePage = () => {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {formatCurrency(viewMode === 'monthly' ? totals.monthly : totals.quarterly)}
+              {formatCurrency(totals.totalVATDue)}
             </div>
             <p className="text-xs text-muted-foreground">
-              {viewMode === 'monthly' ? 'Ce mois' : 'Ce trimestre'}
+              TVA collectée analysée
             </p>
           </CardContent>
         </Card>
@@ -281,7 +238,7 @@ const CompliancePage = () => {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">
-              TVA OSS
+              TVA OSS/IOSS
             </CardTitle>
             <TrendingUp className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
@@ -304,10 +261,10 @@ const CompliancePage = () => {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {complianceData.length}
+              {totals.jurisdictions}
             </div>
             <p className="text-xs text-muted-foreground">
-              {complianceData.filter(d => d.status === 'compliant').length} conformes
+              {totals.compliantCount} conformes
             </p>
           </CardContent>
         </Card>
@@ -321,7 +278,7 @@ const CompliancePage = () => {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-orange-600">
-              {complianceData.filter(d => d.status !== 'compliant').length}
+              {totals.warningCount}
             </div>
             <p className="text-xs text-muted-foreground">
               Nécessitent attention
@@ -346,11 +303,10 @@ const CompliancePage = () => {
             <TableHeader>
               <TableRow>
                 <TableHead>Juridiction</TableHead>
+                <TableHead>Régime TVA</TableHead>
+                <TableHead className="text-right">Ventes HT</TableHead>
+                <TableHead className="text-right">TVA Due</TableHead>
                 <TableHead>Numéro TVA</TableHead>
-                <TableHead className="text-right">
-                  {viewMode === 'monthly' ? 'TVA mensuelle' : 'TVA trimestrielle'}
-                </TableHead>
-                <TableHead>Prochaine échéance</TableHead>
                 <TableHead>Statut</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
@@ -369,14 +325,23 @@ const CompliancePage = () => {
                       )}
                     </div>
                   </TableCell>
+                  <TableCell>
+                    <div className="flex flex-wrap gap-1">
+                      {item.regimes.map((regime, idx) => (
+                        <Badge key={idx} variant="secondary" className="text-xs">
+                          {regime}
+                        </Badge>
+                      ))}
+                    </div>
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {formatCurrency(item.salesAmount)}
+                  </TableCell>
+                  <TableCell className="text-right font-bold text-orange-600">
+                    {formatCurrency(item.vatDue)}
+                  </TableCell>
                   <TableCell className="font-mono text-sm">
                     {item.taxId}
-                  </TableCell>
-                  <TableCell className="text-right font-bold">
-                    {formatCurrency(viewMode === 'monthly' ? item.monthlyVAT : item.quarterlyVAT)}
-                  </TableCell>
-                  <TableCell>
-                    {formatDate(item.nextDueDate)}
                   </TableCell>
                   <TableCell>
                     {getStatusBadge(item.status)}
@@ -413,10 +378,10 @@ const CompliancePage = () => {
           <div className="space-y-4">
             <div className="flex justify-between items-center p-4 bg-muted/50 rounded-lg">
               <span className="font-medium">
-                Total TVA par juridictions ({viewMode === 'monthly' ? 'mensuel' : 'trimestriel'})
+                Total TVA due calculée (toutes juridictions)
               </span>
               <span className="text-xl font-bold">
-                {formatCurrency(viewMode === 'monthly' ? totals.monthly : totals.quarterly)}
+                {formatCurrency(totals.totalVATDue)}
               </span>
             </div>
             
@@ -432,21 +397,23 @@ const CompliancePage = () => {
               </span>
             </div>
 
-            <div className="grid gap-3 md:grid-cols-2">
+            <div className="grid gap-3 md:grid-cols-3">
               <div className="p-3 border rounded-lg">
-                <div className="text-sm text-muted-foreground">TVA nationale</div>
+                <div className="text-sm text-muted-foreground">TVA Nationale</div>
                 <div className="text-lg font-semibold">
-                  {formatCurrency(
-                    complianceData
-                      .filter(item => !item.isOSS)
-                      .reduce((sum, item) => sum + (viewMode === 'monthly' ? item.monthlyVAT : item.quarterlyVAT), 0)
-                  )}
+                  {formatCurrency(totals.nationalAmount)}
                 </div>
               </div>
               <div className="p-3 border rounded-lg">
                 <div className="text-sm text-muted-foreground">TVA OSS/IOSS</div>
                 <div className="text-lg font-semibold">
                   {formatCurrency(totals.ossAmount)}
+                </div>
+              </div>
+              <div className="p-3 border rounded-lg">
+                <div className="text-sm text-muted-foreground">Total Ventes HT</div>
+                <div className="text-lg font-semibold">
+                  {formatCurrency(totals.totalSales)}
                 </div>
               </div>
             </div>

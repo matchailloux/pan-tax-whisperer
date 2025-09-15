@@ -42,6 +42,7 @@ export interface DetailedVATReport {
     residuelRules: number;
     totalProcessed: number;
   };
+  rawTransactions?: any[]; // Transactions brutes pour le module Compliance
 }
 
 // Configuration YAML intégrée
@@ -59,6 +60,7 @@ preprocessing:
       columns:
         - TRANSACTION_TYPE
         - TOTAL_ACTIVITY_VALUE_AMT_VAT_EXCL
+        - TOTAL_ACTIVITY_VALUE_VAT_AMT
         - TAX_REPORTING_SCHEME
         - SALE_ARRIVAL_COUNTRY
         - SALE_DEPART_COUNTRY
@@ -74,6 +76,7 @@ preprocessing:
     - type: rename_columns
       mapping:
         TOTAL_ACTIVITY_VALUE_AMT_VAT_EXCL: AMOUNT_RAW
+        TOTAL_ACTIVITY_VALUE_VAT_AMT: VAT_AMT
         TAX_REPORTING_SCHEME: SCHEME
         SALE_ARRIVAL_COUNTRY: ARRIVAL
         SALE_DEPART_COUNTRY: DEPART
@@ -951,6 +954,7 @@ function createEmptyReport(): DetailedVATReport {
       suisseRules: 0,
       residuelRules: 0,
       totalProcessed: 0
-    }
+    },
+    rawTransactions: [] // Inclure les transactions brutes même en cas d'erreur
   };
 }
