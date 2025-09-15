@@ -110,7 +110,10 @@ export const useVATAnalysis = () => {
         }
       })();
 
-      if ((Array.isArray(yamlReport.breakdown) && yamlReport.breakdown.length > 0) || forceYAML) {
+      const hasCountries = Array.isArray(yamlReport.breakdown) && yamlReport.breakdown.length > 0;
+      // Considérer l'analyse réussie si des transactions ont été traitées, même sans ventilation par pays
+      const hasAnyTx = (yamlReport as any)?.rulesApplied?.totalProcessed > 0;
+      if (hasCountries || hasAnyTx || forceYAML) {
         // Succès (ou YAML forcé)
         const title = forceYAML && (!yamlReport.breakdown || yamlReport.breakdown.length === 0)
           ? `Analyse ${fileName} (YAML forcé)`

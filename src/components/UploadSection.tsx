@@ -120,7 +120,9 @@ const UploadSection = () => {
           }
         })();
 
-        if ((Array.isArray(report.breakdown) && report.breakdown.length > 0) || forceYAML) {
+        const hasCountries = Array.isArray(report.breakdown) && report.breakdown.length > 0;
+        const hasAnyTx = (report as any)?.rulesApplied?.totalProcessed > 0;
+        if (hasCountries || hasAnyTx || forceYAML) {
           setNewVatData(report);
           setVatBreakdown(null);
 

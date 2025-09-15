@@ -504,37 +504,78 @@ for (const tx of transactions) {
 
   if (txType === 'OTHER') continue;
 
-  // Montant brut: essayer de nombreuses variantes Amazon
-  const amountCandidateKeys = [
+  // Montant brut: essayer de nombreuses variantes Amazon (priorité VAT_EXCL)
+  const vatExclKeys = [
+    'TRANSACTION_VALUE_AMT_VAT_EXCL',
+    'TRANSACTION_VALUE_AMOUNT_VAT_EXCL',
+    'TRANSACTION_VALUE_VAT_EXCL',
     'TOTAL_ACTIVITY_VALUE_AMT_VAT_EXCL',
     'TOTAL_ACTIVITY_VALUE_AMOUNT_VAT_EXCL',
-    'TRANSACTION_VALUE_VAT_EXCL',
-    'TRANSACTION_VALUE_AMOUNT_VAT_EXCL',
+    'PRICE_AMOUNT_VAT_EXCL',
+    'ITEM_PRICE_VAT_EXCL',
+    'ITEM_PRICE_AMOUNT_VAT_EXCL',
+    'ORDER_ITEM_PRICE_VAT_EXCL',
+    'ORDER_ITEM_PRICE_AMOUNT_VAT_EXCL',
+    'AMOUNT_RAW',
+  ];
+  const vatInclKeys = [
+    'TRANSACTION_VALUE_AMT_VAT_INCL',
+    'TRANSACTION_VALUE_AMOUNT_VAT_INCL',
+    'TRANSACTION_VALUE_VAT_INCL',
+    'TOTAL_ACTIVITY_VALUE_AMT_VAT_INCL',
+    'TOTAL_ACTIVITY_VALUE_AMOUNT_VAT_INCL',
+    'PRICE_AMOUNT_VAT_INCL',
+    'ITEM_PRICE_VAT_INCL',
+    'ORDER_ITEM_PRICE_VAT_INCL',
+    'ORDER_ITEM_PRICE_AMOUNT_VAT_INCL',
+  ];
+  const genericAmountKeys = [
     'TOTAL_ACTIVITY_VALUE_AMT',
     'TOTAL_ACTIVITY_VALUE',
     'TRANSACTION_VALUE',
-    'AMOUNT_RAW',
-    'PRICE_AMOUNT_VAT_EXCL',
-    'ITEM_PRICE_VAT_EXCL',
+    'ORDER_ITEM_PRICE',
     'ITEM_PRICE_AMOUNT',
-    'ORDER_ITEM_PRICE'
+    'AMOUNT',
+    'AMT',
   ];
+
   let amountStr = '';
-  for (const k of amountCandidateKeys) {
-    const val = (tx as any)[k];
-    if (val !== undefined && val !== null && String(val).trim() !== '') { amountStr = String(val); break; }
-  }
-  // Fallback heuristique: prendre la première colonne "montant" plausible
+  let amountRaw = 0;
+
+  const tryKeys = (keys: string[], requireNonZero: boolean) => {
+    for (const k of keys) {
+      const val = (tx as any)[k];
+      const s = val !== undefined && val !== null ? String(val).trim() : '';
+      if (!s) continue;
+      const n = parseAmount(s);
+      if (!isNaN(n) && (!requireNonZero || n !== 0)) {
+        amountStr = s;
+        amountRaw = n;
+        return true;
+      }
+    }
+    return false;
+  };
+
+  // 2 passes: préférer une valeur non nulle si possible
+  if (!tryKeys(vatExclKeys, true))
+    if (!tryKeys(vatExclKeys, false))
+      if (!tryKeys(vatInclKeys, true))
+        if (!tryKeys(vatInclKeys, false))
+          if (!tryKeys(genericAmountKeys, true))
+            tryKeys(genericAmountKeys, false);
+
+  // Fallback heuristique: première colonne plausible si rien trouvé
   if (!amountStr) {
     for (const [key, val] of Object.entries(tx)) {
       const keyU = key.toUpperCase();
       if (/(AMOUNT|AMT|VALUE|PRICE|TOTAL)/.test(keyU) && !/(TAX_RATE|VAT_RATE|PERCENT|QTY|QUANTITY|COUNT)/.test(keyU)) {
         const s = String(val ?? '').trim();
-        if (s && /[0-9]/.test(s)) { amountStr = s; break; }
+        if (s && /[0-9]/.test(s)) { amountStr = s; amountRaw = parseAmount(s); break; }
       }
     }
   }
-  const amountRaw = parseAmount(amountStr);
+
   const amountSigned = txType === 'REFUND' ? -Math.abs(amountRaw) : Math.abs(amountRaw);
 
   // Champs normalisés avec fallback + normalisation schéma
@@ -599,6 +640,12 @@ for (const tx of transactions) {
 
   if (processed.length === 0) {
     console.warn('⚠️ Aucune transaction retenue après preprocessing. Types vus:', Array.from(seenTypes.entries()));
+  } else {
+    const zeroAmounts = processed.filter(p => p.AMOUNT_RAW === 0).length;
+    const nonZero = processed.length - zeroAmounts;
+    const sample = processed.slice(0, 3);
+    console.log(`🧮 Résumé preprocessing → total: ${processed.length}, montants non nuls: ${nonZero}, montants nuls: ${zeroAmounts}`);
+    console.debug('🔎 Échantillon transactions (après normalisation):', sample);
   }
 
   return processed;
