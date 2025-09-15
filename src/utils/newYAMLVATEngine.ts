@@ -510,6 +510,16 @@ for (const tx of transactions) {
     const val = (tx as any)[k];
     if (val !== undefined && val !== null && String(val).trim() !== '') { amountStr = String(val); break; }
   }
+  // Fallback heuristique: prendre la première colonne "montant" plausible
+  if (!amountStr) {
+    for (const [key, val] of Object.entries(tx)) {
+      const keyU = key.toUpperCase();
+      if (/(AMOUNT|AMT|VALUE|PRICE|TOTAL)/.test(keyU) && !/(TAX_RATE|VAT_RATE|PERCENT|QTY|QUANTITY|COUNT)/.test(keyU)) {
+        const s = String(val ?? '').trim();
+        if (s && /[0-9]/.test(s)) { amountStr = s; break; }
+      }
+    }
+  }
   const amountRaw = parseAmount(amountStr);
   const amountSigned = txType === 'REFUND' ? -Math.abs(amountRaw) : Math.abs(amountRaw);
 

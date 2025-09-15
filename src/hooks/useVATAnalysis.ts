@@ -144,7 +144,7 @@ export const useVATAnalysis = () => {
 
         toast({
           title: 'Aucune transaction reconnue',
-          description: "Impossible d'identifier des opérations de type SALE/REFUND. Vérifiez le fichier CSV (colonnes TYPE/EVENT).",
+          description: "Impossible d'identifier des opérations SALE/REFUND. Vérifiez la colonne TRANSACTION_TYPE (valeurs SALE ou REFUND).",
           variant: 'destructive',
         });
 
