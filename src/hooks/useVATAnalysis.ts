@@ -137,26 +137,20 @@ export const useVATAnalysis = () => {
           reportId
         };
       } else {
-        // Fallback vers le moteur legacy
-        const legacyReport = processVATWithNewYAMLRules(fileContent);
-        const reportId = await saveReport(legacyReport, `Analyse ${fileName} (fallback)`, fileId, clientId);
-        
+        // Aucun résultat du moteur YAML → on considère que c'est une erreur d'entrée (pas de fallback)
         if (updateFileStatus) {
-          await updateFileStatus(fileId, 'completed');
+          await updateFileStatus(fileId, 'error');
         }
 
         toast({
-          title: 'Analyse terminée (fallback)',
-          description: "Le moteur YAML n'a rien détecté, bascule vers le moteur legacy effectuée.",
+          title: 'Aucune transaction reconnue',
+          description: "Impossible d'identifier des opérations de type SALE/REFUND. Vérifiez le fichier CSV (colonnes TYPE/EVENT).",
+          variant: 'destructive',
         });
 
-        // Refresh immédiat des rapports
-        window.dispatchEvent(new CustomEvent('vat-analysis-completed'));
-
         return {
-          success: true,
-          data: legacyReport,
-          reportId
+          success: false,
+          data: null
         };
       }
     } catch (error) {
