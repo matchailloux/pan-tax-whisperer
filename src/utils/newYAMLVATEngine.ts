@@ -484,40 +484,94 @@ function preprocessTransactions(transactions: any[]): ProcessedTransaction[] {
   // Stat pour debug si rien ne passe
   const seenTypes = new Map<string, number>();
 
-  for (const tx of transactions) {
-    const rawType = extractRawTxType(tx);
-    seenTypes.set(rawType || '(VIDE)', (seenTypes.get(rawType || '(VIDE)') || 0) + 1);
-    const txType = normalizeTxType(rawType);
-    if (txType === 'OTHER') continue;
+for (const tx of transactions) {
+  const rawType = extractRawTxType(tx);
+  seenTypes.set(rawType || '(VIDE)', (seenTypes.get(rawType || '(VIDE)') || 0) + 1);
+  const txType = normalizeTxType(rawType);
+  if (txType === 'OTHER') continue;
 
-    // Montant brut (essaye plusieurs variantes connues)
-    const amountRaw = parseAmount(
-      (tx.TOTAL_ACTIVITY_VALUE_AMT_VAT_EXCL ?? tx.AMOUNT_RAW ?? tx.TOTAL_ACTIVITY_VALUE_AMOUNT_VAT_EXCL ?? tx.TRANSACTION_VALUE_VAT_EXCL ?? '') as string
-    );
-    const amountSigned = txType === 'REFUND' ? -Math.abs(amountRaw) : Math.abs(amountRaw);
-
-    // Champs normalisés avec fallback
-    const scheme = (tx.TAX_REPORTING_SCHEME ?? tx.SCHEME ?? '').toString().toUpperCase().trim();
-    const arrival = normalizeCountry((tx.SALE_ARRIVAL_COUNTRY ?? tx.ARRIVAL ?? '') as string);
-    const depart = normalizeCountry((tx.SALE_DEPART_COUNTRY ?? tx.DEPART ?? '') as string);
-    let buyerVat = normalizeCountry((tx.BUYER_VAT_NUMBER_COUNTRY ?? tx.BUYER_VAT ?? '') as string);
-
-    // Normaliser les vides (B2C)
-    const emptyValues = ['', '(VIDE)', '(VIDES)', 'NULL', 'N/A', '-', '—', 'NONE', ' '];
-    if (emptyValues.includes(buyerVat)) {
-      buyerVat = '';
-    }
-
-    processed.push({
-      TX_TYPE: txType,
-      AMOUNT_RAW: amountRaw,
-      AMOUNT_SIGNED: amountSigned,
-      SCHEME: scheme,
-      ARRIVAL: arrival,
-      DEPART: depart,
-      BUYER_VAT: buyerVat
-    });
+  // Montant brut: essayer de nombreuses variantes Amazon
+  const amountCandidateKeys = [
+    'TOTAL_ACTIVITY_VALUE_AMT_VAT_EXCL',
+    'TOTAL_ACTIVITY_VALUE_AMOUNT_VAT_EXCL',
+    'TRANSACTION_VALUE_VAT_EXCL',
+    'TRANSACTION_VALUE_AMOUNT_VAT_EXCL',
+    'TOTAL_ACTIVITY_VALUE_AMT',
+    'TOTAL_ACTIVITY_VALUE',
+    'TRANSACTION_VALUE',
+    'AMOUNT_RAW',
+    'PRICE_AMOUNT_VAT_EXCL',
+    'ITEM_PRICE_VAT_EXCL',
+    'ITEM_PRICE_AMOUNT',
+    'ORDER_ITEM_PRICE'
+  ];
+  let amountStr = '';
+  for (const k of amountCandidateKeys) {
+    const val = (tx as any)[k];
+    if (val !== undefined && val !== null && String(val).trim() !== '') { amountStr = String(val); break; }
   }
+  const amountRaw = parseAmount(amountStr);
+  const amountSigned = txType === 'REFUND' ? -Math.abs(amountRaw) : Math.abs(amountRaw);
+
+  // Champs normalisés avec fallback + normalisation schéma
+  let scheme = String((tx as any).TAX_REPORTING_SCHEME ?? (tx as any).SCHEME ?? (tx as any).TAX_SCHEME ?? '').toUpperCase().trim();
+  scheme = scheme.replace(/\s+/g, '-');
+  if (/OSS/i.test(scheme)) scheme = 'UNION-OSS';
+  if (scheme === 'CH-VOEC') scheme = 'CH_VOEC';
+
+  const arrivalCandidateKeys = [
+    'SALE_ARRIVAL_COUNTRY','ARRIVAL','ARRIVAL_COUNTRY',
+    'SHIP_TO_COUNTRY','SHIP_TO_COUNTRY_CODE',
+    'DESTINATION_COUNTRY','DESTINATION_COUNTRY_CODE'
+  ];
+  let arrival = '';
+  for (const k of arrivalCandidateKeys) {
+    const v = (tx as any)[k];
+    if (v) { arrival = normalizeCountry(String(v)); if (arrival) break; }
+  }
+
+  const departCandidateKeys = [
+    'SALE_DEPART_COUNTRY','DEPART','DEPARTURE_COUNTRY',
+    'SHIP_FROM_COUNTRY','SHIP_FROM_COUNTRY_CODE',
+    'ORIGIN_COUNTRY','ORIGIN_COUNTRY_CODE','FULFILLMENT_CENTER_COUNTRY'
+  ];
+  let depart = '';
+  for (const k of departCandidateKeys) {
+    const v = (tx as any)[k];
+    if (v) { depart = normalizeCountry(String(v)); if (depart) break; }
+  }
+
+  // BUYER_VAT: essayer pays direct sinon extraire du numéro de TVA
+  const buyerVatCandidateKeys = [
+    'BUYER_VAT_NUMBER_COUNTRY','BUYER_VAT','BUYER_VAT_COUNTRY','B2B_BUYER_VAT_COUNTRY','BUYER_VAT_NUMBER'
+  ];
+  let buyerVat = '';
+  for (const k of buyerVatCandidateKeys) {
+    const v = (tx as any)[k];
+    if (v) {
+      const s = String(v).toUpperCase().trim();
+      const m = s.match(/^([A-Z]{2})/);
+      buyerVat = normalizeCountry(m ? m[1] : s);
+      if (buyerVat) break;
+    }
+  }
+
+  // Normaliser les vides (B2C)
+  const emptyValues = ['', '(VIDE)', '(VIDES)', 'NULL', 'N/A', '-', '—', 'NONE', ' '];
+  if (emptyValues.includes(buyerVat)) {
+    buyerVat = '';
+  }
+
+  processed.push({
+    TX_TYPE: txType,
+    AMOUNT_RAW: amountRaw,
+    AMOUNT_SIGNED: amountSigned,
+    SCHEME: scheme,
+    ARRIVAL: arrival,
+    DEPART: depart,
+    BUYER_VAT: buyerVat
+  });
+}
 
   if (processed.length === 0) {
     console.warn('⚠️ Aucune transaction retenue après preprocessing. Types vus:', Array.from(seenTypes.entries()));
@@ -527,24 +581,51 @@ function preprocessTransactions(transactions: any[]): ProcessedTransaction[] {
 }
 
 function parseAmount(value: string): number {
-  if (!value) return 0;
-  
-  let cleaned = value.toString()
-    .replace(/[€$£¥]/g, '') // Remove currency symbols
-    .replace(/\s/g, '') // Remove spaces
-    .replace(/['"]/g, '') // Remove quotes
-    .replace(/,/g, '.'); // Replace comma with dot for decimal
+  if (value === undefined || value === null) return 0;
 
-  // Remove thousand separators (but keep the last dot for decimal)
-  const parts = cleaned.split('.');
-  if (parts.length > 2) {
-    // Multiple dots, the last one is likely decimal
-    const decimal = parts.pop();
-    cleaned = parts.join('') + '.' + decimal;
+  // Stringify and normalize common oddities from Amazon/Excel exports
+  let s = String(value)
+    .replace(/[€$£¥]/g, '') // currency symbols
+    .replace(/[\u00A0\s]/g, '') // spaces including NBSP
+    .replace(/[−–—]/g, '-') // various minus dashes to ASCII minus
+    .trim();
+
+  // Determine negativity but ignore it in returned value (sign handled by tx type)
+  const isParenNegative = /^\(.*\)$/.test(s);
+  const hasMinus = s.includes('-');
+  const negative = isParenNegative || hasMinus;
+
+  // Strip wrappers and signs, we return absolute and let business logic sign later
+  s = s.replace(/^\((.*)\)$/,'$1').replace(/-/g,'');
+
+  // Decide decimal separator strategy
+  const lastDot = s.lastIndexOf('.');
+  const lastComma = s.lastIndexOf(',');
+  if (lastDot !== -1 && lastComma !== -1) {
+    // Both present: keep the one that appears last as decimal, remove the other
+    if (lastDot > lastComma) {
+      s = s.replace(/,/g, ''); // commas as thousands
+    } else {
+      s = s.replace(/\./g, ''); // dots as thousands
+      s = s.replace(/,/g, '.'); // comma decimal
+    }
+  } else if (lastComma !== -1 && lastDot === -1) {
+    s = s.replace(/,/g, '.');
   }
 
-  const result = parseFloat(cleaned);
-  return isNaN(result) ? 0 : result;
+  // Remove any remaining non digit/decimal
+  s = s.replace(/[^0-9.]/g, '');
+
+  // Collapse multiple dots to a single decimal point (last one kept)
+  const parts = s.split('.');
+  if (parts.length > 2) {
+    const decimal = parts.pop();
+    s = parts.join('') + (decimal !== undefined ? '.' + decimal : '');
+  }
+
+  const n = parseFloat(s);
+  const abs = isNaN(n) ? 0 : Math.abs(n);
+  return abs; // business logic will apply sign for REFUND
 }
 
 function normalizeCountry(country: string): string {
