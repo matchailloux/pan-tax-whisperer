@@ -480,6 +480,13 @@ const UploadSection = () => {
           </div>
         </CardContent>
       </Card>
+
+      {/* Period Selection Dialog */}
+      <PeriodSelectionDialog
+        open={showPeriodDialog}
+        onOpenChange={setShowPeriodDialog}
+        onConfirm={handlePeriodConfirm}
+      />
     </div>
   );
 };
