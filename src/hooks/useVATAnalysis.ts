@@ -2,8 +2,8 @@ import { useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useClientVATReports } from '@/hooks/useClientVATReports';
-import { processVATWithNewRules, DetailedVATReport } from '@/utils/newVATRulesEngine';
-import { processVATWithYAMLRules } from '@/utils/yamlVATEngine';
+import { DetailedVATReport } from '@/utils/newVATRulesEngine';
+import { processVATWithNewYAMLRules } from '@/utils/newYAMLVATEngine';
 import { processAmazonVATReport } from '@/utils/amazonVATEngine';
 
 export interface AnalysisResult {
@@ -88,7 +88,7 @@ export const useVATAnalysis = () => {
         });
 
       // Essai avec le nouveau moteur YAML conforme aux spécifications
-      const yamlReport = processVATWithYAMLRules(fileContent);
+      const yamlReport = processVATWithNewYAMLRules(fileContent);
 
       // Debug console: stats + aperçu résultat
       try {
