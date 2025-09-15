@@ -166,16 +166,34 @@ function preprocessYAML(rawTransactions: any[]): ProcessedTransaction[] {
 
   const mapCountry = (c: string): string => normalizeCountryCode((c || '').toString().trim());
 
+  // Variantes d'en-têtes (après normalisation en MAJ+_)
+  const getFirst = (obj: any, keys: string[], def: any = '') => {
+    for (const k of keys) {
+      if (Object.prototype.hasOwnProperty.call(obj, k)) {
+        const v = obj[k];
+        if (v !== undefined && v !== null && `${v}`.trim() !== '') return v;
+      }
+    }
+    return def;
+  };
+
+  const txTypeKeys = ['TRANSACTION_TYPE','TRANSACTIONTYPE','TX_TYPE','TYPE','TRANSACTION','TYPE_TRANSACTION'];
+  const schemeKeys = ['TAX_REPORTING_SCHEME','TAX_REPORTING','REPORTING_SCHEME','VAT_REPORTING_SCHEME','SCHEME'];
+  const arrivalKeys = ['SALE_ARRIVAL_COUNTRY','ARRIVAL_COUNTRY','ARRIVAL','SHIP_TO_COUNTRY','SHIP_TO','DESTINATION_COUNTRY'];
+  const departKeys = ['SALE_DEPART_COUNTRY','DEPART_COUNTRY','DEPART','SHIP_FROM_COUNTRY','SHIP_FROM','ORIGIN_COUNTRY'];
+  const buyerVatKeys = ['BUYER_VAT_NUMBER_COUNTRY','BUYER_VAT_COUNTRY','BUYER_VAT','VAT_NUMBER_COUNTRY','VAT_BUYER_COUNTRY','BUYER_VAT_NUMBER_PREFIX'];
+  const amountKeys = ['TOTAL_ACTIVITY_VALUE_AMT_VAT_EXCL','TOTAL_ACTIVITY_VALUE_VAT_EXCL','TOTAL_ACTIVITY_VALUE','TOTAL_VAT_EXCL','AMOUNT_VAT_EXCL','AMOUNT','NET_AMOUNT','ITEM_PRICE_EXCL_VAT','TRANSACTION_AMOUNT'];
+
   const mapped: ProcessedTransaction[] = rawTransactions.map(transaction => {
-    const txType = normalizeTxType(transaction['TRANSACTION_TYPE']);
-    const scheme = normalizeScheme(transaction['TAX_REPORTING_SCHEME']);
-    const arrival = mapCountry(transaction['SALE_ARRIVAL_COUNTRY']);
-    const depart = mapCountry(transaction['SALE_DEPART_COUNTRY']);
-    let buyerVat = (transaction['BUYER_VAT_NUMBER_COUNTRY'] || '').toString().trim().toUpperCase();
+    const txType = normalizeTxType(getFirst(transaction, txTypeKeys, ''));
+    const scheme = normalizeScheme(getFirst(transaction, schemeKeys, ''));
+    const arrival = mapCountry(getFirst(transaction, arrivalKeys, ''));
+    const depart = mapCountry(getFirst(transaction, departKeys, ''));
+    let buyerVat = (getFirst(transaction, buyerVatKeys, '') || '').toString().trim().toUpperCase();
     if (emptyValues.includes(buyerVat)) buyerVat = '';
     buyerVat = mapCountry(buyerVat) || '';
 
-    const amount = parseAmount(transaction['TOTAL_ACTIVITY_VALUE_AMT_VAT_EXCL']);
+    const amount = parseAmount(getFirst(transaction, amountKeys, ''));
     const amountSigned = txType === 'REFUND' ? -Math.abs(amount) : Math.abs(amount);
 
     return {
