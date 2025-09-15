@@ -186,15 +186,27 @@ function preprocessYAML(rawTransactions: any[]): ProcessedTransaction[] {
 
   // Variantes d'en-têtes (après normalisation en MAJ+_)
   const getFirst = (obj: any, keys: string[], def: any = '') => {
+    const keyList = Object.keys(obj);
+    // 1) Correspondance exacte
     for (const k of keys) {
       if (Object.prototype.hasOwnProperty.call(obj, k)) {
         const v = obj[k];
         if (v !== undefined && v !== null && `${v}`.trim() !== '') return v;
       }
     }
+    // 2) Correspondance approximative (substring) ex: AMOUNT_VAT_EXCL_EUR ≈ AMOUNT_VAT_EXCL
+    for (const k of keys) {
+      const found = keyList.find(h => h.includes(k) || k.includes(h));
+      if (found) {
+        const v = obj[found];
+        if (v !== undefined && v !== null && `${v}`.trim() !== '') {
+          console.log(`🔎 Mapping approximatif: "${k}" -> "${found}"`);
+          return v;
+        }
+      }
+    }
     return def;
   };
-
   const txTypeKeys = ['TRANSACTION_TYPE','TRANSACTIONTYPE','TX_TYPE','TYPE','TRANSACTION','TYPE_TRANSACTION'];
   const schemeKeys = ['TAX_REPORTING_SCHEME','TAX_REPORTING','REPORTING_SCHEME','VAT_REPORTING_SCHEME','SCHEME'];
   const arrivalKeys = ['SALE_ARRIVAL_COUNTRY','ARRIVAL_COUNTRY','ARRIVAL','SHIP_TO_COUNTRY','SHIP_TO','DESTINATION_COUNTRY'];
@@ -707,8 +719,9 @@ function parseCSV(csvContent: string): any[] {
   }
 
   const firstLine = lines[0].replace(/^\uFEFF/, '');
-  const delimiter = detectDelimiter(firstLine);
-  console.log(`🧭 Délimiteur détecté: "${delimiter === '\t' ? 'TAB' : delimiter}"`);
+  const sample = lines.slice(0, Math.min(10, lines.length)).join('\n');
+  const delimiter = detectDelimiter(sample);
+  console.log(`🧭 Délimiteur détecté: "${delimiter === '\t' ? 'TAB' : delimiter}" (échantillon 10 lignes)`);
   
   const rawHeaders = parseCSVLine(firstLine, delimiter);
   console.log('📋 En-têtes bruts extraits:', rawHeaders.slice(0, 8), rawHeaders.length > 8 ? `... (+${rawHeaders.length - 8} autres)` : '');
