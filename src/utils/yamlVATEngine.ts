@@ -703,16 +703,24 @@ function calculateYAMLRulesStatistics(transactions: ProcessedTransaction[]) {
  * Parser CSV avec détection automatique de délimiteur
  */
 function detectDelimiter(sample: string): string {
+  // Compte brut des séparateurs potentiels sur l'échantillon
   const comma = (sample.match(/,/g) || []).length;
   const semicolon = (sample.match(/;/g) || []).length;
   const tab = (sample.match(/\t/g) || []).length;
-  if (semicolon >= comma && semicolon >= tab) return ';';
-  if (tab >= comma && tab >= semicolon) return '\t';
-  return ',';
+  const pipe = (sample.match(/\|/g) || []).length;
+
+  // Choix initial par majorité
+  let cand: string = ',';
+  let max = comma;
+  if (semicolon > max) { cand = ';'; max = semicolon; }
+  if (tab > max) { cand = '\t'; max = tab; }
+  if (pipe > max) { cand = '|'; max = pipe; }
+  return cand;
 }
 
 function parseCSV(csvContent: string): any[] {
-  const lines = csvContent.split('\n').filter(line => line.trim());
+  // Supporte CRLF et LF
+  const lines = csvContent.split(/\r?\n/).filter(line => line.trim().length > 0);
   if (lines.length < 2) {
     console.log('❌ ERREUR CSV: Fichier vide ou sans données (moins de 2 lignes)');
     return [];
@@ -720,12 +728,32 @@ function parseCSV(csvContent: string): any[] {
 
   const firstLine = lines[0].replace(/^\uFEFF/, '');
   const sample = lines.slice(0, Math.min(10, lines.length)).join('\n');
-  const delimiter = detectDelimiter(sample);
+  let delimiter = detectDelimiter(sample);
   console.log(`🧭 Délimiteur détecté: "${delimiter === '\t' ? 'TAB' : delimiter}" (échantillon 10 lignes)`);
-  
-  const rawHeaders = parseCSVLine(firstLine, delimiter);
+
+  // Première passe sur les en-têtes
+  let rawHeaders = parseCSVLine(firstLine, delimiter);
   console.log('📋 En-têtes bruts extraits:', rawHeaders.slice(0, 8), rawHeaders.length > 8 ? `... (+${rawHeaders.length - 8} autres)` : '');
-  
+
+  // Fallback intelligent: si une seule colonne détectée, ré-essaie d'autres délimiteurs
+  if (rawHeaders.length <= 1) {
+    const candidates = [',', ';', '\t', '|'];
+    let best = rawHeaders;
+    let bestDelim = delimiter;
+    for (const d of candidates) {
+      const h = parseCSVLine(firstLine, d);
+      if (h.length > best.length) {
+        best = h;
+        bestDelim = d;
+      }
+    }
+    if (bestDelim !== delimiter) {
+      console.log(`🔁 Délimiteur recalibré: "${bestDelim === '\t' ? 'TAB' : bestDelim}" (au lieu de ${delimiter === '\t' ? 'TAB' : delimiter})`);
+      delimiter = bestDelim;
+      rawHeaders = best;
+    }
+  }
+
   const normalizeHeader = (h: string) =>
     h
       .replace(/^\uFEFF/, '')
@@ -736,7 +764,7 @@ function parseCSV(csvContent: string): any[] {
       .replace(/^_|_$/g, '');
   const headers = rawHeaders.map(normalizeHeader);
   console.log('📋 En-têtes normalisés:', headers.slice(0, 8), headers.length > 8 ? `... (+${headers.length - 8} autres)` : '');
-  
+
   const transactions: any[] = [];
   let parseErrors = 0;
 
@@ -744,7 +772,7 @@ function parseCSV(csvContent: string): any[] {
     try {
       const values = parseCSVLine(lines[i], delimiter);
       const transaction: any = {};
-      
+
       headers.forEach((header, index) => {
         const value = values[index] ?? '';
         if (typeof value === 'string') {
@@ -760,7 +788,7 @@ function parseCSV(csvContent: string): any[] {
           transaction[header] = value;
         }
       });
-      
+
       // Sanitize global sur toutes les colonnes (sécurité)
       Object.keys(transaction).forEach(key => {
         const v = transaction[key];
@@ -771,7 +799,7 @@ function parseCSV(csvContent: string): any[] {
           transaction[key] = s;
         }
       });
-      
+
       transactions.push(transaction);
     } catch (error) {
       parseErrors++;
