@@ -1,9 +1,12 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { CheckCircle, XCircle, AlertTriangle, Info, TrendingUp, Users, Globe, Building, MapPin } from "lucide-react";
+import { CheckCircle, XCircle, AlertTriangle, Info, TrendingUp, Users, Globe, Building, MapPin, Download } from "lucide-react";
 import { DetailedVATReport } from "@/utils/newYAMLVATEngine";
+import { exportVATReportToExcel } from "@/utils/excelExport";
+import { toast } from "sonner";
 
 interface NewVATBreakdownProps {
   report: DetailedVATReport;
@@ -25,6 +28,16 @@ export function NewVATBreakdown({ report, fileName }: NewVATBreakdownProps) {
   };
 
   const invalidCountries = sanityCheckByCountry.filter(c => !c.isValid);
+
+  const handleExportExcel = () => {
+    try {
+      exportVATReportToExcel(report, fileName || 'analyse_tva');
+      toast.success('Export Excel généré avec succès');
+    } catch (error) {
+      console.error('Erreur lors de l\'export Excel:', error);
+      toast.error('Erreur lors de la génération du fichier Excel');
+    }
+  };
 
   const getKPIIcon = (title: string) => {
     if (title.includes('Total')) return TrendingUp;
@@ -52,6 +65,14 @@ export function NewVATBreakdown({ report, fileName }: NewVATBreakdownProps) {
 
   return (
     <div className="space-y-6">
+      {/* Bouton d'export Excel */}
+      <div className="flex justify-end">
+        <Button onClick={handleExportExcel} className="gap-2">
+          <Download className="h-4 w-4" />
+          Exporter en Excel
+        </Button>
+      </div>
+
       {/* Sanity Check Global */}
       <Card>
         <CardHeader>
