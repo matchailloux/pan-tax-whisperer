@@ -127,43 +127,6 @@ function isVatPlausible(vat: string): boolean {
   return /^[A-Z]{2}[A-Z0-9]{2,}$/.test(cleaned);
 }
 
-// Detect CSV delimiter with confidence score
-function detectDelimiter(content: string): { delimiter: string; confidence: number } {
-  const lines = content.split('\n').slice(0, 10).filter(l => l.trim());
-  const delimiters = ['\t', ';', ','];
-  const results: Array<{ delimiter: string; avgCols: number; consistency: number }> = [];
-  
-  for (const delim of delimiters) {
-    const colCounts: number[] = [];
-    
-    for (const line of lines) {
-      // Simple split (RFC CSV parsing will be done later)
-      const cols = line.split(delim).length;
-      colCounts.push(cols);
-    }
-    
-    if (colCounts.length === 0) continue;
-    
-    const avgCols = colCounts.reduce((a, b) => a + b, 0) / colCounts.length;
-    const mostCommon = colCounts.sort((a, b) => 
-      colCounts.filter(v => v === a).length - colCounts.filter(v => v === b).length
-    ).pop() || 0;
-    
-    const consistency = colCounts.filter(c => c === mostCommon).length / colCounts.length;
-    
-    results.push({ delimiter: delim, avgCols, consistency });
-  }
-  
-  // Choose delimiter with highest consistency and column count > 10
-  const best = results
-    .filter(r => r.avgCols > 10)
-    .sort((a, b) => b.consistency - a.consistency)[0];
-  
-  return best 
-    ? { delimiter: best.delimiter, confidence: best.consistency }
-    : { delimiter: ',', confidence: 0 };
-}
-
 // Parse CSV line with RFC-compliant quote handling
 function parseCSVLine(line: string, delimiter: string): string[] {
   const result: string[] = [];
@@ -192,7 +155,53 @@ function parseCSVLine(line: string, delimiter: string): string[] {
   return result;
 }
 
+// Detect CSV delimiter with proper quote handling
+function detectDelimiter(content: string): { delimiter: string; confidence: number } {
+  const lines = content.split('\n').slice(0, 10).filter(l => l.trim());
+  const delimiters = ['\t', ';', ','];
+  const results: Array<{ delimiter: string; avgCols: number; consistency: number }> = [];
+  
+  for (const delim of delimiters) {
+    const colCounts: number[] = [];
+    
+    for (const line of lines) {
+      // Use proper CSV parsing to respect quotes
+      const cols = parseCSVLine(line, delim).length;
+      colCounts.push(cols);
+    }
+    
+    if (colCounts.length === 0) continue;
+    
+    const avgCols = colCounts.reduce((a, b) => a + b, 0) / colCounts.length;
+    const mostCommonCount = Math.max(...colCounts.map(c => 
+      colCounts.filter(x => x === c).length
+    ));
+    const mostCommon = colCounts.find(c => 
+      colCounts.filter(x => x === c).length === mostCommonCount
+    ) || 0;
+    
+    const consistency = colCounts.filter(c => c === mostCommon).length / colCounts.length;
+    
+    results.push({ delimiter: delim, avgCols, consistency });
+  }
+  
+  // Sort by: 1) column count > 10, 2) consistency, 3) column count
+  results.sort((a, b) => {
+    const aValid = a.avgCols > 10 ? 1 : 0;
+    const bValid = b.avgCols > 10 ? 1 : 0;
+    if (aValid !== bValid) return bValid - aValid;
+    if (Math.abs(a.consistency - b.consistency) > 0.1) return b.consistency - a.consistency;
+    return b.avgCols - a.avgCols;
+  });
+  
+  const best = results[0];
+  return best && best.avgCols > 10
+    ? { delimiter: best.delimiter, confidence: best.consistency }
+    : { delimiter: '\t', confidence: 0.5 }; // Default to TAB if uncertain
+}
+
 // Parse CSV content with robust delimiter detection
+
 function parseCSV(content: string, delimiter: string): { rows: CSVRow[]; headers: string[] } {
   const lines = content.split('\n');
   if (lines.length < 2) return { rows: [], headers: [] };
@@ -200,6 +209,9 @@ function parseCSV(content: string, delimiter: string): { rows: CSVRow[]; headers
   // Clean and parse headers
   const rawHeaders = parseCSVLine(lines[0], delimiter);
   const headers = rawHeaders.map(cleanHeaders).filter(h => h.length > 0);
+  
+  console.log(`First 5 raw headers: ${rawHeaders.slice(0, 5).join(' | ')}`);
+  console.log(`Parsed ${headers.length} headers after cleaning`);
   
   // Remove duplicate headers by adding index
   const seenHeaders = new Map<string, number>();
@@ -216,6 +228,10 @@ function parseCSV(content: string, delimiter: string): { rows: CSVRow[]; headers
     if (!line) continue;
 
     const values = parseCSVLine(line, delimiter);
+    
+    // Skip if not enough values
+    if (values.length < Math.min(5, uniqueHeaders.length)) continue;
+    
     const row: CSVRow = {};
     
     uniqueHeaders.forEach((header, index) => {
