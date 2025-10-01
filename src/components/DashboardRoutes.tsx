@@ -5,7 +5,6 @@ import IndividualDashboardLayout from './IndividualDashboardLayout';
 import FirmDashboardLayout from './FirmDashboardLayout';
 import DashboardHome from '@/pages/dashboard/DashboardHome';
 import AnalysisPage from '@/pages/dashboard/AnalysisPage';
-import RulesEnginePage from '@/pages/dashboard/RulesEnginePage';
 import DocumentsPage from '@/pages/dashboard/DocumentsPage';
 import ReportsPage from '@/pages/dashboard/ReportsPage';
 import ActivityPage from '@/pages/dashboard/ActivityPage';
@@ -61,7 +60,6 @@ const DashboardRoutes = () => {
       <Route path="/*" element={<IndividualDashboardLayout />}> 
         <Route index element={<DashboardHome />} />
         <Route path="analysis" element={<AnalysisPage />} />
-        <Route path="rules-engine" element={<RulesEnginePage />} />
         <Route path="documents" element={<DocumentsPage />} />
         <Route path="reports" element={<ReportsPage />} />
         <Route path="activity" element={<ActivityPage />} />

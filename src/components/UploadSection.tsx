@@ -11,7 +11,6 @@ import { useVATReports } from '@/hooks/useVATReports';
 import { VATBreakdown } from './VATBreakdown';
 import { NewVATBreakdown } from './NewVATBreakdown';
 import { VATAnalyticsCharts } from './VATAnalyticsCharts';
-import { RulesConfig } from './RulesConfig';
 import { processVATWithNewYAMLRules } from '@/utils/newYAMLVATEngine';
 import * as XLSX from 'xlsx';
 import { DebugYAMLBar } from '@/components/DebugYAMLBar';
@@ -387,15 +386,6 @@ const UploadSection = () => {
         </CardContent>
       </Card>
 
-      {/* Rules Configuration (only in manual mode) */}
-      {!useAutomaticEngine && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Configuration des règles</CardTitle>
-            <CardDescription>Mode manuel activé</CardDescription>
-          </CardHeader>
-        </Card>
-      )}
 
       {/* Résultats avec graphiques */}
       {newVatData && (

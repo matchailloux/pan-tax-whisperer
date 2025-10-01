@@ -47,11 +47,6 @@ const individualMenuItems = [
     icon: BarChart3,
   },
   {
-    title: "Moteur de Règle",
-    url: "/dashboard/rules-engine",
-    icon: BarChart3,
-  },
-  {
     title: "Rapports",
     url: "/dashboard/reports",
     icon: BarChart3,
