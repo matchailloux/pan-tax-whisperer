@@ -1,12 +1,26 @@
 // Moteur de règles avancé pour l'analyse TVA Amazon
+// Lecture robuste de CSV avec détection automatique du séparateur
 
-const EU_COUNTRIES = [
+// EU country codes (excluding UK post-Brexit)
+const EU_COUNTRIES = new Set([
   'AT', 'BE', 'BG', 'HR', 'CY', 'CZ', 'DK', 'EE', 'FI', 'FR',
-  'DE', 'GR', 'HU', 'IE', 'IT', 'LV', 'LT', 'LU', 'MT', 'NL',
-  'PL', 'PT', 'RO', 'SK', 'SI', 'ES', 'SE'
-];
+  'DE', 'GR', 'EL', 'HU', 'IE', 'IT', 'LV', 'LT', 'LU', 'MT',
+  'NL', 'PL', 'PT', 'RO', 'SK', 'SI', 'ES', 'SE'
+]);
 
 const DOMESTIC_TARGET_COUNTRIES = ['FR', 'DE', 'ES', 'IT'];
+
+// Country name to ISO code mapping
+const COUNTRY_CODES: { [key: string]: string } = {
+  'FRANCE': 'FR', 'GERMANY': 'DE', 'SPAIN': 'ES', 'ITALY': 'IT',
+  'UNITED KINGDOM': 'GB', 'UK': 'GB', 'NETHERLANDS': 'NL',
+  'BELGIUM': 'BE', 'AUSTRIA': 'AT', 'POLAND': 'PL', 'SWEDEN': 'SE',
+  'DENMARK': 'DK', 'FINLAND': 'FI', 'IRELAND': 'IE', 'PORTUGAL': 'PT',
+  'GREECE': 'GR', 'CZECH REPUBLIC': 'CZ', 'HUNGARY': 'HU', 'ROMANIA': 'RO',
+  'BULGARIA': 'BG', 'CROATIA': 'HR', 'SLOVAKIA': 'SK', 'SLOVENIA': 'SI',
+  'LUXEMBOURG': 'LU', 'ESTONIA': 'EE', 'LATVIA': 'LV', 'LITHUANIA': 'LT',
+  'CYPRUS': 'CY', 'MALTA': 'MT', 'SWITZERLAND': 'CH', 'NORWAY': 'NO'
+};
 
 interface CSVRow {
   [key: string]: string;
@@ -54,114 +68,305 @@ interface Anomaly {
   tx_event_id?: string;
 }
 
+interface DiagnosticInfo {
+  columns: Array<{ name: string; samples: string[] }>;
+  rowCount: number;
+  delimiter: string;
+}
+
 export interface AdvancedVATReport {
   consolidated: ConsolidatedRow[];
   domesticVAT: DomesticVAT[];
   ossVAT: OSSVAT[];
   anomalies: Anomaly[];
   currencies: string[];
+  diagnostic: DiagnosticInfo;
 }
 
-// Étape 1: Nettoyage et préparation
+// Helper: Clean headers (remove BOM, quotes, trailing "", etc.)
 function cleanHeaders(header: string): string {
   return header
-    .replace(/^\uFEFF/, '') // BOM
-    .replace(/^"|"$/g, '') // guillemets
+    .replace(/^[\uFEFF\xEF\xBB\xBF]+/, '') // Remove BOM
+    .replace(/"+$/, '') // Remove trailing quotes (e.g., ACTIVITY_PERIOD"")
+    .replace(/^"+/, '') // Remove leading quotes
+    .replace(/"/g, '') // Remove remaining quotes
     .trim()
     .toUpperCase()
     .replace(/\s+/g, '_');
 }
 
-function parseCSV(content: string): CSVRow[] {
-  const lines = content.split('\n').filter(line => line.trim());
-  if (lines.length === 0) return [];
+// Normalize country to ISO 2-letter code
+function normalizeCountry(country: string): string {
+  if (!country) return '';
+  
+  const cleaned = country.trim().toUpperCase();
+  
+  // Already a 2-letter code
+  if (/^[A-Z]{2}$/.test(cleaned)) {
+    return cleaned;
+  }
+  
+  // Look up in mapping
+  if (COUNTRY_CODES[cleaned]) {
+    return COUNTRY_CODES[cleaned];
+  }
+  
+  // Try to extract 2-letter code from longer string
+  const match = cleaned.match(/\b([A-Z]{2})\b/);
+  if (match) {
+    return match[1];
+  }
+  
+  return cleaned.substring(0, 2); // Fallback
+}
 
-  const rawHeaders = lines[0].split(/[,;\t]/);
-  const headers = rawHeaders.map(cleanHeaders);
+// Check if VAT number is plausible (format: XX + alphanumeric)
+function isVatPlausible(vat: string): boolean {
+  if (!vat) return false;
+  const cleaned = vat.trim().toUpperCase();
+  return /^[A-Z]{2}[A-Z0-9]{2,}$/.test(cleaned);
+}
+
+// Detect CSV delimiter with confidence score
+function detectDelimiter(content: string): { delimiter: string; confidence: number } {
+  const lines = content.split('\n').slice(0, 10).filter(l => l.trim());
+  const delimiters = ['\t', ';', ','];
+  const results: Array<{ delimiter: string; avgCols: number; consistency: number }> = [];
+  
+  for (const delim of delimiters) {
+    const colCounts: number[] = [];
+    
+    for (const line of lines) {
+      // Simple split (RFC CSV parsing will be done later)
+      const cols = line.split(delim).length;
+      colCounts.push(cols);
+    }
+    
+    if (colCounts.length === 0) continue;
+    
+    const avgCols = colCounts.reduce((a, b) => a + b, 0) / colCounts.length;
+    const mostCommon = colCounts.sort((a, b) => 
+      colCounts.filter(v => v === a).length - colCounts.filter(v => v === b).length
+    ).pop() || 0;
+    
+    const consistency = colCounts.filter(c => c === mostCommon).length / colCounts.length;
+    
+    results.push({ delimiter: delim, avgCols, consistency });
+  }
+  
+  // Choose delimiter with highest consistency and column count > 10
+  const best = results
+    .filter(r => r.avgCols > 10)
+    .sort((a, b) => b.consistency - a.consistency)[0];
+  
+  return best 
+    ? { delimiter: best.delimiter, confidence: best.consistency }
+    : { delimiter: ',', confidence: 0 };
+}
+
+// Parse CSV line with RFC-compliant quote handling
+function parseCSVLine(line: string, delimiter: string): string[] {
+  const result: string[] = [];
+  let current = '';
+  let inQuotes = false;
+  
+  for (let i = 0; i < line.length; i++) {
+    const char = line[i];
+    const nextChar = line[i + 1];
+    
+    if (char === '"') {
+      if (inQuotes && nextChar === '"') {
+        current += '"';
+        i++; // Skip next quote
+      } else {
+        inQuotes = !inQuotes;
+      }
+    } else if (char === delimiter && !inQuotes) {
+      result.push(current.trim());
+      current = '';
+    } else {
+      current += char;
+    }
+  }
+  result.push(current.trim());
+  return result;
+}
+
+// Parse CSV content with robust delimiter detection
+function parseCSV(content: string, delimiter: string): { rows: CSVRow[]; headers: string[] } {
+  const lines = content.split('\n');
+  if (lines.length < 2) return { rows: [], headers: [] };
+
+  // Clean and parse headers
+  const rawHeaders = parseCSVLine(lines[0], delimiter);
+  const headers = rawHeaders.map(cleanHeaders).filter(h => h.length > 0);
+  
+  // Remove duplicate headers by adding index
+  const seenHeaders = new Map<string, number>();
+  const uniqueHeaders = headers.map(h => {
+    const count = seenHeaders.get(h) || 0;
+    seenHeaders.set(h, count + 1);
+    return count > 0 ? `${h}_${count}` : h;
+  });
 
   const rows: CSVRow[] = [];
+
   for (let i = 1; i < lines.length; i++) {
-    const values = lines[i].split(/[,;\t]/);
+    const line = lines[i].trim();
+    if (!line) continue;
+
+    const values = parseCSVLine(line, delimiter);
     const row: CSVRow = {};
-    headers.forEach((header, idx) => {
-      row[header] = values[idx]?.replace(/^"|"$/g, '').trim() || '';
+    
+    uniqueHeaders.forEach((header, index) => {
+      if (header) {
+        row[header] = values[index]?.replace(/^"|"$/g, '').trim() || '';
+      }
     });
-    rows.push(row);
+    
+    // Only keep rows with some data
+    if (Object.values(row).some(v => v)) {
+      rows.push(row);
+    }
   }
 
-  return rows;
+  return { rows, headers: uniqueHeaders };
 }
 
+// Parse amount - handle various decimal formats (comma/dot)
+function parseAmount(value: string): number {
+  if (!value) return 0;
+  // Replace comma with dot, remove spaces and other non-numeric chars except - and .
+  const cleaned = value.replace(/\s/g, '').replace(',', '.').replace(/[^\d.-]/g, '');
+  const parsed = parseFloat(cleaned);
+  return isNaN(parsed) ? 0 : parsed;
+}
+
+// Map CSV columns to transaction structure
 function mapColumns(row: CSVRow): Partial<ProcessedTransaction> {
-  const mapped: Partial<ProcessedTransaction> = {};
-
-  // Mapping des colonnes
-  if (row.TOTAL_ACTIVITY_VALUE_AMT_VAT_EXCL) mapped.HT = parseFloat(row.TOTAL_ACTIVITY_VALUE_AMT_VAT_EXCL) || 0;
-  if (row.TOTAL_ACTIVITY_VALUE_VAT_AMT) mapped.TVA = parseFloat(row.TOTAL_ACTIVITY_VALUE_VAT_AMT) || 0;
+  const htAmount = parseAmount(
+    row['TOTAL_ACTIVITY_VALUE_AMT_VAT_EXCL'] || 
+    row['TOTAL_ACTIVITY_VALUE_AMOUNT_VAT_EXCL'] ||
+    row['HT'] || 
+    row['NET_AMOUNT'] || 
+    '0'
+  );
   
-  const txType = (row.TRANSACTION_TYPE || '').toUpperCase();
-  if (txType === 'SALE' || txType === 'REFUND') {
-    mapped.TX_TYPE = txType as 'SALE' | 'REFUND';
+  const vatAmount = parseAmount(
+    row['TOTAL_ACTIVITY_VALUE_VAT_AMT'] || 
+    row['TOTAL_ACTIVITY_VALUE_VAT_AMOUNT'] ||
+    row['TVA'] || 
+    row['VAT_AMOUNT'] ||
+    '0'
+  );
+  
+  // Get transaction type
+  let txType = (
+    row['TRANSACTION_TYPE'] || 
+    row['TX_TYPE'] || 
+    row['TYPE'] ||
+    'SALE'
+  ).toUpperCase();
+  
+  // Normalize transaction type
+  if (txType.includes('REFUND') || txType.includes('RETURN')) {
+    txType = 'REFUND';
+  } else if (txType.includes('SALE')) {
+    txType = 'SALE';
   }
-
-  mapped.ARRIVAL_COUNTRY = (row.SALE_ARRIVAL_COUNTRY || row.TAXABLE_JURISDICTION || '').toUpperCase().trim();
-  mapped.DEPART_COUNTRY = (row.SALE_DEPART_COUNTRY || '').toUpperCase().trim();
-  mapped.BUYER_VAT = (row.BUYER_VAT_NUMBER || '').trim();
-  mapped.TAX_SCHEME = (row.TAX_REPORTING_SCHEME || '').toUpperCase().trim();
-  mapped.TAX_RESP = (row.TAX_COLLECTION_RESPONSIBILITY || '').toUpperCase().trim();
-  mapped.TX_EVENT_ID = row.TRANSACTION_EVENT_ID;
-  mapped.CURRENCY = (row.TRANSACTION_CURRENCY_CODE || row.CURRENCY || 'EUR').toUpperCase().trim();
-
-  // REFUND = montants négatifs
-  if (mapped.TX_TYPE === 'REFUND') {
-    if (mapped.HT !== undefined) mapped.HT = -Math.abs(mapped.HT);
-    if (mapped.TVA !== undefined) mapped.TVA = -Math.abs(mapped.TVA);
+  
+  // Filter only SALE/REFUND transactions
+  if (!['SALE', 'REFUND'].includes(txType)) {
+    return {};
   }
+  
+  // REFUND should have negative amounts
+  const multiplier = txType === 'REFUND' ? -1 : 1;
+  const finalHt = Math.abs(htAmount) * multiplier;
+  const finalVat = Math.abs(vatAmount) * multiplier;
+  
+  // Get arrival country with fallback
+  let arrivalCountry = 
+    row['SALE_ARRIVAL_COUNTRY'] || 
+    row['ARRIVAL_COUNTRY'] ||
+    row['DESTINATION_COUNTRY'] ||
+    row['SHIP_TO_COUNTRY'] ||
+    row['BUYER_COUNTRY'] ||
+    row['TAXABLE_JURISDICTION'] ||
+    '';
+  
+  // Try any column ending with _COUNTRY or _COUNTRY_CODE
+  if (!arrivalCountry) {
+    const countryCol = Object.keys(row).find(k => 
+      k.endsWith('_COUNTRY') || k.endsWith('_COUNTRY_CODE')
+    );
+    if (countryCol) arrivalCountry = row[countryCol];
+  }
+  
+  arrivalCountry = normalizeCountry(arrivalCountry);
+  
+  const departCountry = normalizeCountry(
+    row['SALE_DEPART_COUNTRY'] || 
+    row['DEPART_COUNTRY'] || 
+    row['DEPARTURE_COUNTRY'] ||
+    row['WAREHOUSE_COUNTRY'] ||
+    ''
+  );
 
-  return mapped;
+  return {
+    TX_EVENT_ID: row['TRANSACTION_EVENT_ID'] || row['TX_EVENT_ID'],
+    TX_TYPE: txType as 'SALE' | 'REFUND',
+    HT: finalHt,
+    TVA: finalVat,
+    ARRIVAL_COUNTRY: arrivalCountry,
+    DEPART_COUNTRY: departCountry,
+    BUYER_VAT: row['BUYER_VAT_NUMBER'] || row['BUYER_VAT'] || '',
+    TAX_SCHEME: row['TAX_REPORTING_SCHEME'] || row['TAX_SCHEME'] || '',
+    TAX_RESP: row['TAX_COLLECTION_RESPONSIBILITY'] || row['TAX_RESP'] || '',
+    CURRENCY: row['CURRENCY'] || row['TRANSACTION_CURRENCY_CODE'] || 'EUR'
+  };
 }
 
-function isValidVAT(vat: string): boolean {
-  if (!vat || vat.length < 4) return false;
-  // Format basique: 2 lettres + chiffres
-  return /^[A-Z]{2}[0-9A-Z]{2,}/.test(vat);
-}
-
-// Étape 2: Catégorisation
+// Categorize transaction based on business rules (priority order)
 function categorize(tx: Partial<ProcessedTransaction>): string {
   const arrival = tx.ARRIVAL_COUNTRY || '';
   const depart = tx.DEPART_COUNTRY || '';
   const buyerVAT = tx.BUYER_VAT || '';
   const taxScheme = tx.TAX_SCHEME || '';
 
-  // 1) EXPORT (hors UE)
-  if (arrival && !EU_COUNTRIES.includes(arrival)) {
+  const isEU = EU_COUNTRIES.has(arrival);
+  const hasVat = isVatPlausible(buyerVAT);
+
+  // Rule 1: EXPORT (non-EU destination)
+  if (arrival && !isEU) {
     return 'EXPORT';
   }
 
-  // 2) INTRACOM B2B
-  if (arrival && EU_COUNTRIES.includes(arrival) && isValidVAT(buyerVAT)) {
+  // Rule 2: INTRACOM B2B (EU with valid VAT number)
+  if (isEU && hasVat) {
     return 'INTRACOM B2B';
   }
 
-  // 3) REGULAR (domestique)
-  if (depart && arrival && depart === arrival) {
+  // Rule 3: REGULAR (domestic - same arrival and depart country)
+  if (arrival && depart && arrival === depart) {
     return 'REGULAR';
   }
-  if (taxScheme.includes('DOMESTIC') || taxScheme.includes('LOCAL')) {
+  
+  // Also REGULAR if tax scheme indicates domestic
+  if (taxScheme && (taxScheme.includes('DOMESTIC') || taxScheme.includes('LOCAL'))) {
     return 'REGULAR';
   }
 
-  // 4) OSS (B2C transfrontalière UE)
-  if (arrival && EU_COUNTRIES.includes(arrival) && !isValidVAT(buyerVAT)) {
+  // Rule 4: OSS (EU B2C cross-border)
+  if (isEU && !hasVat) {
     return 'OSS';
   }
 
-  // 5) A_VERIFIER
+  // Rule 5: Everything else needs verification
   return 'A_VERIFIER';
 }
 
-// Étape 3: Consolidation
+// Consolidate transactions by country and category
 function consolidate(transactions: ProcessedTransaction[]): ConsolidatedRow[] {
   const map = new Map<string, ConsolidatedRow>();
 
@@ -188,13 +393,13 @@ function consolidate(transactions: ProcessedTransaction[]): ConsolidatedRow[] {
     tva: Math.round(row.tva * 100) / 100
   }));
 
-  // Tri par pays puis catégorie
+  // Sort by country then category
   rows.sort((a, b) => {
     if (a.pays !== b.pays) return a.pays.localeCompare(b.pays);
     return a.categorie.localeCompare(b.categorie);
   });
 
-  // Ligne total
+  // Add total row
   const total: ConsolidatedRow = {
     pays: 'TOTAL GÉNÉRAL',
     categorie: '',
@@ -207,12 +412,12 @@ function consolidate(transactions: ProcessedTransaction[]): ConsolidatedRow[] {
   return rows;
 }
 
-// Étape 4: Récaps TVA
+// Get domestic VAT for target countries (FR, DE, ES, IT)
 function getDomesticVAT(transactions: ProcessedTransaction[]): DomesticVAT[] {
   const regular = transactions.filter(tx => tx.CATEGORIE === 'REGULAR');
   const map = new Map<string, DomesticVAT>();
 
-  // Initialiser les pays cibles même si 0
+  // Initialize target countries even if 0
   DOMESTIC_TARGET_COUNTRIES.forEach(country => {
     map.set(country, { pays: country, tva: 0, ca_ht: 0, transactions: 0 });
   });
@@ -233,6 +438,7 @@ function getDomesticVAT(transactions: ProcessedTransaction[]): DomesticVAT[] {
   }));
 }
 
+// Get OSS VAT by country + TOTAL OSS row
 function getOSSVAT(transactions: ProcessedTransaction[]): OSSVAT[] {
   const oss = transactions.filter(tx => tx.CATEGORIE === 'OSS');
   const map = new Map<string, OSSVAT>();
@@ -258,7 +464,7 @@ function getOSSVAT(transactions: ProcessedTransaction[]): OSSVAT[] {
     ca_ht: Math.round(row.ca_ht * 100) / 100
   })).sort((a, b) => a.pays.localeCompare(b.pays));
 
-  // Total OSS
+  // Add TOTAL OSS row
   const total: OSSVAT = {
     pays: 'TOTAL OSS',
     tva: Math.round(rows.reduce((sum, r) => sum + r.tva, 0) * 100) / 100,
@@ -270,13 +476,13 @@ function getOSSVAT(transactions: ProcessedTransaction[]): OSSVAT[] {
   return rows;
 }
 
-// Étape 5: Anomalies
+// Detect anomalies in transactions
 function detectAnomalies(transactions: ProcessedTransaction[]): Anomaly[] {
   const anomalies: Anomaly[] = [];
 
   transactions.forEach(tx => {
-    // B2B avec VAT manquant
-    if (tx.CATEGORIE === 'INTRACOM B2B' && !isValidVAT(tx.BUYER_VAT || '')) {
+    // B2B with missing/invalid VAT
+    if (tx.CATEGORIE === 'INTRACOM B2B' && !isVatPlausible(tx.BUYER_VAT || '')) {
       anomalies.push({
         type: 'B2B_VAT_MANQUANT',
         description: `Ligne B2B sans numéro TVA valide: ${tx.ARRIVAL_COUNTRY}`,
@@ -284,7 +490,7 @@ function detectAnomalies(transactions: ProcessedTransaction[]): Anomaly[] {
       });
     }
 
-    // Sans pays d'arrivée
+    // Missing arrival country
     if (!tx.ARRIVAL_COUNTRY) {
       anomalies.push({
         type: 'PAYS_MANQUANT',
@@ -293,16 +499,16 @@ function detectAnomalies(transactions: ProcessedTransaction[]): Anomaly[] {
       });
     }
 
-    // TVA > 0 pour INTRACOM/EXPORT
+    // VAT > 0 for INTRACOM/EXPORT (should be 0)
     if ((tx.CATEGORIE === 'INTRACOM B2B' || tx.CATEGORIE === 'EXPORT') && tx.TVA > 0.01) {
       anomalies.push({
         type: 'TVA_ANORMALE',
-        description: `TVA > 0 pour ${tx.CATEGORIE}: ${tx.ARRIVAL_COUNTRY}`,
+        description: `TVA > 0 pour ${tx.CATEGORIE}: ${tx.ARRIVAL_COUNTRY} (${tx.TVA.toFixed(2)}€)`,
         tx_event_id: tx.TX_EVENT_ID
       });
     }
 
-    // REGULAR mais pays différents
+    // REGULAR but different countries
     if (tx.CATEGORIE === 'REGULAR' && tx.DEPART_COUNTRY && tx.ARRIVAL_COUNTRY && 
         tx.DEPART_COUNTRY !== tx.ARRIVAL_COUNTRY) {
       anomalies.push({
@@ -316,20 +522,55 @@ function detectAnomalies(transactions: ProcessedTransaction[]): Anomaly[] {
   return anomalies;
 }
 
-// Fonction principale
-export function processAdvancedVAT(csvContent: string): AdvancedVATReport {
-  const rows = parseCSV(csvContent);
+// Generate diagnostic information
+function generateDiagnostic(rows: CSVRow[], headers: string[], delimiter: string): DiagnosticInfo {
+  const columns: Array<{ name: string; samples: string[] }> = [];
   
+  // Get first 3 non-empty values for each column
+  for (const header of headers.slice(0, 20)) { // Limit to first 20 columns
+    const samples: string[] = [];
+    for (const row of rows) {
+      if (samples.length >= 3) break;
+      const value = row[header];
+      if (value && value.trim()) {
+        samples.push(value.substring(0, 50)); // Limit length
+      }
+    }
+    columns.push({ name: header, samples });
+  }
+  
+  return {
+    columns,
+    rowCount: rows.length,
+    delimiter: delimiter === '\t' ? 'TAB' : delimiter === ';' ? 'POINT-VIRGULE' : 'VIRGULE'
+  };
+}
+
+// Main processing function
+export function processAdvancedVAT(csvContent: string): AdvancedVATReport {
+  // Step 1: Detect delimiter
+  const { delimiter, confidence } = detectDelimiter(csvContent);
+  
+  console.log(`Detected delimiter: ${delimiter === '\t' ? 'TAB' : delimiter} (confidence: ${(confidence * 100).toFixed(1)}%)`);
+  
+  // Step 2: Parse CSV with detected delimiter
+  const { rows, headers } = parseCSV(csvContent, delimiter);
+  
+  console.log(`Parsed ${rows.length} rows with ${headers.length} columns`);
+  
+  // Step 3: Generate diagnostic
+  const diagnostic = generateDiagnostic(rows, headers, delimiter);
+  
+  // Step 4: Map and filter transactions
   const transactions: ProcessedTransaction[] = [];
   const currencies = new Set<string>();
 
   rows.forEach(row => {
     const mapped = mapColumns(row);
     
-    // Filtre: TX_TYPE valide, montants présents
-    if (!mapped.TX_TYPE || (mapped.TX_TYPE !== 'SALE' && mapped.TX_TYPE !== 'REFUND')) return;
+    // Filter: TX_TYPE valid, amounts present, country present
+    if (!mapped.TX_TYPE || !mapped.ARRIVAL_COUNTRY) return;
     if (mapped.HT === undefined || mapped.TVA === undefined) return;
-    if (!mapped.ARRIVAL_COUNTRY) return;
 
     const categorie = categorize(mapped);
     
@@ -351,11 +592,15 @@ export function processAdvancedVAT(csvContent: string): AdvancedVATReport {
     currencies.add(tx.CURRENCY);
   });
 
+  console.log(`Mapped ${transactions.length} valid transactions`);
+
+  // Step 5: Generate reports
   return {
     consolidated: consolidate(transactions),
     domesticVAT: getDomesticVAT(transactions),
     ossVAT: getOSSVAT(transactions),
     anomalies: detectAnomalies(transactions),
-    currencies: Array.from(currencies)
+    currencies: Array.from(currencies),
+    diagnostic
   };
 }

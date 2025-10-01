@@ -1,9 +1,9 @@
 import { useState } from "react";
-import { Upload, FileText, AlertTriangle } from "lucide-react";
+import { Upload, FileText, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { useToast } from "@/hooks/use-toast";
 import { processAdvancedVAT, type AdvancedVATReport } from "@/utils/advancedVATEngine";
 
@@ -22,8 +22,8 @@ const RulesEnginePage = () => {
       const result = processAdvancedVAT(content);
       setReport(result);
       toast({
-        title: "Analyse terminée",
-        description: "Le rapport TVA a été analysé avec succès"
+        title: "✅ Analyse terminée",
+        description: `${result.consolidated.length - 1} lignes consolidées, ${result.anomalies.length} anomalies détectées`
       });
     } catch (error) {
       console.error("Erreur:", error);
@@ -41,19 +41,19 @@ const RulesEnginePage = () => {
     <div className="container mx-auto p-6 space-y-6">
       <div className="text-center space-y-3">
         <h1 className="text-4xl font-bold bg-gradient-primary bg-clip-text text-transparent">
-          Moteur de Règle
+          Moteur de Règle TVA
         </h1>
         <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-          Analysez vos rapports de transactions TVA Amazon avec catégorisation avancée
+          Analysez vos rapports de transactions TVA Amazon avec catégorisation avancée et détection automatique du format
         </p>
       </div>
 
       {/* Upload Section */}
       <Card>
         <CardHeader>
-          <CardTitle>Importer un rapport TVA Amazon</CardTitle>
+          <CardTitle>📤 Importer un rapport TVA Amazon</CardTitle>
           <CardDescription>
-            Format CSV attendu avec colonnes Amazon (TOTAL_ACTIVITY_VALUE_AMT_VAT_EXCL, TRANSACTION_TYPE, etc.)
+            Format CSV avec détection automatique du délimiteur (tabulation, point-virgule, virgule)
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -77,21 +77,42 @@ const RulesEnginePage = () => {
       </Card>
 
       {report && (
-        <>
-          {/* Devises détectées */}
+        <div className="space-y-6">
+          {/* Diagnostic Section */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">📊 Diagnostic CSV</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-2 text-sm">
+                <p><strong>Délimiteur détecté:</strong> {report.diagnostic.delimiter}</p>
+                <p><strong>Nombre de lignes:</strong> {report.diagnostic.rowCount}</p>
+                <p><strong>Aperçu des colonnes (3 premières valeurs):</strong></p>
+                <div className="mt-2 space-y-1 font-mono text-xs max-h-60 overflow-y-auto bg-muted p-3 rounded">
+                  {report.diagnostic.columns.map((col, idx) => (
+                    <div key={idx}>
+                      <strong className="text-primary">{col.name}:</strong>{' '}
+                      {col.samples.length > 0 ? col.samples.join(' | ') : '(vide)'}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
           {report.currencies.length > 1 && (
             <Alert>
-              <AlertTriangle className="h-4 w-4" />
+              <AlertCircle className="h-4 w-4" />
               <AlertDescription>
-                Plusieurs devises détectées: {report.currencies.join(', ')}
+                ⚠️ Plusieurs devises détectées: {report.currencies.join(', ')}
               </AlertDescription>
             </Alert>
           )}
 
-          {/* Tableau consolidé */}
+          {/* Consolidated Table */}
           <Card>
             <CardHeader>
-              <CardTitle>Tableau Consolidé par Pays et Catégorie</CardTitle>
+              <CardTitle>📋 Tableau Consolidé (Pays × Catégorie)</CardTitle>
             </CardHeader>
             <CardContent>
               <Table>
@@ -119,11 +140,11 @@ const RulesEnginePage = () => {
             </CardContent>
           </Card>
 
-          {/* TVA Domestique (REGULAR) */}
+          {/* Domestic VAT Table */}
           <Card>
             <CardHeader>
-              <CardTitle>(A) TVA DOMESTIQUE (REGULAR)</CardTitle>
-              <CardDescription>FR, DE, ES, IT</CardDescription>
+              <CardTitle>🇪🇺 (A) TVA DOMESTIQUE (REGULAR)</CardTitle>
+              <CardDescription>Pays cibles: FR, DE, ES, IT</CardDescription>
             </CardHeader>
             <CardContent>
               <Table>
@@ -149,11 +170,11 @@ const RulesEnginePage = () => {
             </CardContent>
           </Card>
 
-          {/* TVA OSS */}
+          {/* OSS VAT Table */}
           <Card>
             <CardHeader>
-              <CardTitle>(B) TVA OSS</CardTitle>
-              <CardDescription>Détail par pays UE</CardDescription>
+              <CardTitle>🌍 (B) TVA OSS</CardTitle>
+              <CardDescription>Détail par pays UE + Total OSS</CardDescription>
             </CardHeader>
             <CardContent>
               <Table>
@@ -181,33 +202,36 @@ const RulesEnginePage = () => {
 
           {/* Anomalies */}
           {report.anomalies.length > 0 && (
-            <Card className="border-warning">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <AlertTriangle className="h-5 w-5 text-warning" />
-                  ⚠️ Anomalies détectées ({report.anomalies.length})
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-2">
-                  {report.anomalies.slice(0, 50).map((anomaly, idx) => (
-                    <Alert key={idx} variant="destructive">
-                      <AlertDescription>
-                        <span className="font-medium">{anomaly.type}:</span> {anomaly.description}
-                        {anomaly.tx_event_id && ` (ID: ${anomaly.tx_event_id})`}
-                      </AlertDescription>
-                    </Alert>
+            <Alert variant="destructive">
+              <AlertCircle className="h-4 w-4" />
+              <AlertTitle>⚠️ Anomalies Détectées ({report.anomalies.length})</AlertTitle>
+              <AlertDescription>
+                <ul className="list-disc list-inside space-y-1 mt-2 max-h-60 overflow-y-auto">
+                  {report.anomalies.slice(0, 100).map((anomaly, idx) => (
+                    <li key={idx} className="text-sm">
+                      <strong>{anomaly.type}:</strong> {anomaly.description}
+                      {anomaly.tx_event_id && <span className="text-xs ml-2">(ID: {anomaly.tx_event_id})</span>}
+                    </li>
                   ))}
-                  {report.anomalies.length > 50 && (
-                    <p className="text-sm text-muted-foreground">
-                      ... et {report.anomalies.length - 50} autres anomalies
-                    </p>
+                  {report.anomalies.length > 100 && (
+                    <li className="text-xs text-muted-foreground">
+                      ... et {report.anomalies.length - 100} autres anomalies
+                    </li>
                   )}
-                </div>
-              </CardContent>
-            </Card>
+                </ul>
+              </AlertDescription>
+            </Alert>
           )}
-        </>
+
+          {report.anomalies.length === 0 && (
+            <Alert>
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>
+                ✅ Aucune anomalie détectée
+              </AlertDescription>
+            </Alert>
+          )}
+        </div>
       )}
 
       {!report && !isProcessing && (
