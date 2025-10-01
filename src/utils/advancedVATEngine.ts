@@ -37,6 +37,7 @@ interface ProcessedTransaction {
   TAX_SCHEME?: string;
   TAX_RESP?: string;
   CURRENCY: string;
+  VAT_RATE?: number;
   CATEGORIE: 'OSS' | 'REGULAR' | 'INTRACOM B2B' | 'EXPORT' | 'A_VERIFIER';
 }
 
@@ -93,6 +94,28 @@ interface RegimeData {
   totalTTC: number;
 }
 
+interface VATRateDetail {
+  rate: number; // Taux de TVA en %
+  base: number; // Base HT
+  vat: number;  // Montant TVA
+  transactions: number;
+}
+
+interface VATDeclarationByCountry {
+  country: string;
+  rates: VATRateDetail[];
+  totalBase: number;
+  totalVAT: number;
+  totalTransactions: number;
+}
+
+interface VATDeclaration {
+  oss: VATDeclarationByCountry[];  // Pour la déclaration OSS
+  regular: VATDeclarationByCountry[]; // Pour les déclarations nationales
+  totalOSS: { base: number; vat: number; transactions: number; };
+  totalRegular: { base: number; vat: number; transactions: number; };
+}
+
 interface DiagnosticInfo {
   columns: Array<{ name: string; samples: string[] }>;
   rowCount: number;
@@ -111,6 +134,8 @@ export interface AdvancedVATReport {
   regular: RegimeData;
   voec: RegimeData;
   empty: RegimeData;
+  // VAT declaration by jurisdiction
+  vatDeclaration: VATDeclaration;
 }
 
 // Helper: Clean headers (remove BOM, quotes, trailing "", etc.)
@@ -359,6 +384,14 @@ function mapColumns(row: CSVRow): Partial<ProcessedTransaction> {
     ''
   );
 
+  // Extract VAT rate
+  const vatRateStr = 
+    row['PRICE_OF_ITEMS_VAT_RATE_PERCENT'] ||
+    row['VAT_RATE_PERCENT'] ||
+    row['VAT_RATE'] ||
+    '';
+  const vatRate = parseAmount(vatRateStr);
+
   return {
     TX_EVENT_ID: row['TRANSACTION_EVENT_ID'] || row['TX_EVENT_ID'],
     TX_TYPE: txType as 'SALE' | 'REFUND',
@@ -369,7 +402,8 @@ function mapColumns(row: CSVRow): Partial<ProcessedTransaction> {
     BUYER_VAT: row['BUYER_VAT_NUMBER'] || row['BUYER_VAT'] || '',
     TAX_SCHEME: row['TAX_REPORTING_SCHEME'] || row['TAX_SCHEME'] || '',
     TAX_RESP: row['TAX_COLLECTION_RESPONSIBILITY'] || row['TAX_RESP'] || '',
-    CURRENCY: row['CURRENCY'] || row['TRANSACTION_CURRENCY_CODE'] || 'EUR'
+    CURRENCY: row['CURRENCY'] || row['TRANSACTION_CURRENCY_CODE'] || 'EUR',
+    VAT_RATE: vatRate
   };
 }
 
@@ -707,6 +741,132 @@ function generateRegimeBreakdown(transactions: ProcessedTransaction[]): {
   return result as any;
 }
 
+// Generate VAT declaration by jurisdiction and rate
+function generateVATDeclaration(transactions: ProcessedTransaction[]): VATDeclaration {
+  const ossMap = new Map<string, Map<number, VATRateDetail>>();
+  const regularMap = new Map<string, Map<number, VATRateDetail>>();
+
+  transactions.forEach(tx => {
+    if (tx.TVA === 0) return; // Skip transactions with no VAT
+
+    const rate = tx.VAT_RATE || 0;
+    
+    if (tx.CATEGORIE === 'OSS') {
+      // OSS transactions
+      if (!ossMap.has(tx.ARRIVAL_COUNTRY)) {
+        ossMap.set(tx.ARRIVAL_COUNTRY, new Map());
+      }
+      const countryRates = ossMap.get(tx.ARRIVAL_COUNTRY)!;
+      
+      if (!countryRates.has(rate)) {
+        countryRates.set(rate, { rate, base: 0, vat: 0, transactions: 0 });
+      }
+      const rateDetail = countryRates.get(rate)!;
+      rateDetail.base += tx.HT;
+      rateDetail.vat += tx.TVA;
+      rateDetail.transactions++;
+      
+    } else if (tx.CATEGORIE === 'REGULAR' && DOMESTIC_TARGET_COUNTRIES.includes(tx.ARRIVAL_COUNTRY)) {
+      // Regular domestic transactions for target countries
+      if (!regularMap.has(tx.ARRIVAL_COUNTRY)) {
+        regularMap.set(tx.ARRIVAL_COUNTRY, new Map());
+      }
+      const countryRates = regularMap.get(tx.ARRIVAL_COUNTRY)!;
+      
+      if (!countryRates.has(rate)) {
+        countryRates.set(rate, { rate, base: 0, vat: 0, transactions: 0 });
+      }
+      const rateDetail = countryRates.get(rate)!;
+      rateDetail.base += tx.HT;
+      rateDetail.vat += tx.TVA;
+      rateDetail.transactions++;
+    }
+  });
+
+  // Convert to arrays and calculate totals
+  const oss: VATDeclarationByCountry[] = [];
+  let totalOSSBase = 0;
+  let totalOSSVAT = 0;
+  let totalOSSTransactions = 0;
+
+  for (const [country, ratesMap] of ossMap.entries()) {
+    const rates = Array.from(ratesMap.values())
+      .map(r => ({
+        ...r,
+        base: Math.round(r.base * 100) / 100,
+        vat: Math.round(r.vat * 100) / 100
+      }))
+      .sort((a, b) => b.rate - a.rate); // Sort by rate descending
+
+    const totalBase = rates.reduce((sum, r) => sum + r.base, 0);
+    const totalVAT = rates.reduce((sum, r) => sum + r.vat, 0);
+    const totalTransactions = rates.reduce((sum, r) => sum + r.transactions, 0);
+
+    oss.push({
+      country,
+      rates,
+      totalBase: Math.round(totalBase * 100) / 100,
+      totalVAT: Math.round(totalVAT * 100) / 100,
+      totalTransactions
+    });
+
+    totalOSSBase += totalBase;
+    totalOSSVAT += totalVAT;
+    totalOSSTransactions += totalTransactions;
+  }
+
+  oss.sort((a, b) => a.country.localeCompare(b.country));
+
+  // Regular countries
+  const regular: VATDeclarationByCountry[] = [];
+  let totalRegularBase = 0;
+  let totalRegularVAT = 0;
+  let totalRegularTransactions = 0;
+
+  for (const [country, ratesMap] of regularMap.entries()) {
+    const rates = Array.from(ratesMap.values())
+      .map(r => ({
+        ...r,
+        base: Math.round(r.base * 100) / 100,
+        vat: Math.round(r.vat * 100) / 100
+      }))
+      .sort((a, b) => b.rate - a.rate);
+
+    const totalBase = rates.reduce((sum, r) => sum + r.base, 0);
+    const totalVAT = rates.reduce((sum, r) => sum + r.vat, 0);
+    const totalTransactions = rates.reduce((sum, r) => sum + r.transactions, 0);
+
+    regular.push({
+      country,
+      rates,
+      totalBase: Math.round(totalBase * 100) / 100,
+      totalVAT: Math.round(totalVAT * 100) / 100,
+      totalTransactions
+    });
+
+    totalRegularBase += totalBase;
+    totalRegularVAT += totalVAT;
+    totalRegularTransactions += totalTransactions;
+  }
+
+  regular.sort((a, b) => a.country.localeCompare(b.country));
+
+  return {
+    oss,
+    regular,
+    totalOSS: {
+      base: Math.round(totalOSSBase * 100) / 100,
+      vat: Math.round(totalOSSVAT * 100) / 100,
+      transactions: totalOSSTransactions
+    },
+    totalRegular: {
+      base: Math.round(totalRegularBase * 100) / 100,
+      vat: Math.round(totalRegularVAT * 100) / 100,
+      transactions: totalRegularTransactions
+    }
+  };
+}
+
 // Main processing function
 export function processAdvancedVAT(csvContent: string): AdvancedVATReport {
   // Step 1: Detect delimiter
@@ -763,6 +923,9 @@ export function processAdvancedVAT(csvContent: string): AdvancedVATReport {
   
   // Step 6: Generate new detailed breakdown
   const { unionOSS, regular, voec, empty } = generateRegimeBreakdown(transactions);
+  
+  // Step 7: Generate VAT declaration by jurisdiction
+  const vatDeclaration = generateVATDeclaration(transactions);
 
   return {
     consolidated,
@@ -774,6 +937,7 @@ export function processAdvancedVAT(csvContent: string): AdvancedVATReport {
     unionOSS,
     regular,
     voec,
-    empty
+    empty,
+    vatDeclaration
   };
 }

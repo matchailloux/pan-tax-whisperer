@@ -201,10 +201,137 @@ const RulesEnginePage = () => {
             </Alert>
           )}
 
+          {/* VAT Declaration by Jurisdiction */}
+          <Card>
+            <CardHeader>
+              <CardTitle>💶 Déclaration TVA par Juridiction</CardTitle>
+              <CardDescription>Montants de TVA à déclarer par pays et par taux</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-6">
+                {/* OSS Declaration */}
+                {report.vatDeclaration.oss.length > 0 && (
+                  <div className="space-y-3">
+                    <h3 className="text-lg font-semibold flex items-center gap-2">
+                      <span className="inline-block w-3 h-3 rounded-full bg-blue-500"></span>
+                      Déclaration OSS (Guichet Unique)
+                    </h3>
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Pays</TableHead>
+                          <TableHead className="text-right">Taux TVA (%)</TableHead>
+                          <TableHead className="text-right">Base HT (€)</TableHead>
+                          <TableHead className="text-right">TVA Due (€)</TableHead>
+                          <TableHead className="text-right">Transactions</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {report.vatDeclaration.oss.map((countryData) => (
+                          <>
+                            {countryData.rates.map((rate, idx) => (
+                              <TableRow key={`${countryData.country}-${rate.rate}`}>
+                                {idx === 0 && (
+                                  <TableCell 
+                                    rowSpan={countryData.rates.length} 
+                                    className="font-semibold border-r"
+                                  >
+                                    {countryData.country}
+                                  </TableCell>
+                                )}
+                                <TableCell className="text-right">{rate.rate.toFixed(2)}%</TableCell>
+                                <TableCell className="text-right">{rate.base.toFixed(2)}</TableCell>
+                                <TableCell className="text-right font-medium">{rate.vat.toFixed(2)}</TableCell>
+                                <TableCell className="text-right text-muted-foreground">{rate.transactions}</TableCell>
+                              </TableRow>
+                            ))}
+                            <TableRow className="bg-muted/30">
+                              <TableCell className="font-semibold">Total {countryData.country}</TableCell>
+                              <TableCell></TableCell>
+                              <TableCell className="text-right font-semibold">{countryData.totalBase.toFixed(2)}</TableCell>
+                              <TableCell className="text-right font-semibold text-primary">{countryData.totalVAT.toFixed(2)}</TableCell>
+                              <TableCell className="text-right">{countryData.totalTransactions}</TableCell>
+                            </TableRow>
+                          </>
+                        ))}
+                        <TableRow className="bg-primary/10 font-bold">
+                          <TableCell colSpan={2}>TOTAL OSS À DÉCLARER</TableCell>
+                          <TableCell className="text-right">{report.vatDeclaration.totalOSS.base.toFixed(2)}</TableCell>
+                          <TableCell className="text-right text-primary text-lg">{report.vatDeclaration.totalOSS.vat.toFixed(2)}</TableCell>
+                          <TableCell className="text-right">{report.vatDeclaration.totalOSS.transactions}</TableCell>
+                        </TableRow>
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
+
+                {/* Regular Domestic Declaration */}
+                {report.vatDeclaration.regular.length > 0 && (
+                  <div className="space-y-3">
+                    <h3 className="text-lg font-semibold flex items-center gap-2">
+                      <span className="inline-block w-3 h-3 rounded-full bg-green-500"></span>
+                      Déclarations Nationales (FR/DE/ES/IT)
+                    </h3>
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Pays</TableHead>
+                          <TableHead className="text-right">Taux TVA (%)</TableHead>
+                          <TableHead className="text-right">Base HT (€)</TableHead>
+                          <TableHead className="text-right">TVA Due (€)</TableHead>
+                          <TableHead className="text-right">Transactions</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {report.vatDeclaration.regular.map((countryData) => (
+                          <>
+                            {countryData.rates.map((rate, idx) => (
+                              <TableRow key={`${countryData.country}-${rate.rate}`}>
+                                {idx === 0 && (
+                                  <TableCell 
+                                    rowSpan={countryData.rates.length} 
+                                    className="font-semibold border-r"
+                                  >
+                                    {countryData.country}
+                                  </TableCell>
+                                )}
+                                <TableCell className="text-right">{rate.rate.toFixed(2)}%</TableCell>
+                                <TableCell className="text-right">{rate.base.toFixed(2)}</TableCell>
+                                <TableCell className="text-right font-medium">{rate.vat.toFixed(2)}</TableCell>
+                                <TableCell className="text-right text-muted-foreground">{rate.transactions}</TableCell>
+                              </TableRow>
+                            ))}
+                            <TableRow className="bg-muted/30">
+                              <TableCell className="font-semibold">Total {countryData.country}</TableCell>
+                              <TableCell></TableCell>
+                              <TableCell className="text-right font-semibold">{countryData.totalBase.toFixed(2)}</TableCell>
+                              <TableCell className="text-right font-semibold text-primary">{countryData.totalVAT.toFixed(2)}</TableCell>
+                              <TableCell className="text-right">{countryData.totalTransactions}</TableCell>
+                            </TableRow>
+                          </>
+                        ))}
+                        <TableRow className="bg-green-500/10 font-bold">
+                          <TableCell colSpan={2}>TOTAL REGULAR À DÉCLARER</TableCell>
+                          <TableCell className="text-right">{report.vatDeclaration.totalRegular.base.toFixed(2)}</TableCell>
+                          <TableCell className="text-right text-green-600 text-lg">{report.vatDeclaration.totalRegular.vat.toFixed(2)}</TableCell>
+                          <TableCell className="text-right">{report.vatDeclaration.totalRegular.transactions}</TableCell>
+                        </TableRow>
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
+
+                {report.vatDeclaration.oss.length === 0 && report.vatDeclaration.regular.length === 0 && (
+                  <p className="text-muted-foreground text-center py-8">Aucune TVA à déclarer détectée</p>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+
           {/* TVA détaillée - Tabbed Interface */}
           <Card>
             <CardHeader>
-              <CardTitle>📋 TVA Détaillée</CardTitle>
+              <CardTitle>📋 Ventes par Régime</CardTitle>
               <CardDescription>Vue par régime TVA avec détail SALE/REFUND par pays</CardDescription>
             </CardHeader>
             <CardContent>
