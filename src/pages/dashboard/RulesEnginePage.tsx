@@ -1,15 +1,17 @@
 import { useState } from "react";
-import { Upload, FileText, AlertCircle } from "lucide-react";
+import { Upload, FileText, AlertCircle, ChevronDown, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { processAdvancedVAT, type AdvancedVATReport } from "@/utils/advancedVATEngine";
 
 const RulesEnginePage = () => {
   const [report, setReport] = useState<AdvancedVATReport | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [expandedCountries, setExpandedCountries] = useState<Set<string>>(new Set());
   const { toast } = useToast();
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -35,6 +37,96 @@ const RulesEnginePage = () => {
     } finally {
       setIsProcessing(false);
     }
+  };
+
+  const toggleCountry = (countryKey: string) => {
+    setExpandedCountries(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(countryKey)) {
+        newSet.delete(countryKey);
+      } else {
+        newSet.add(countryKey);
+      }
+      return newSet;
+    });
+  };
+
+  const renderRegimeTable = (regime: 'unionOSS' | 'regular' | 'voec' | 'empty', title: string) => {
+    if (!report) return null;
+    
+    const data = report[regime];
+    if (data.countries.length === 0) return null;
+
+    return (
+      <div className="space-y-4">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="w-12"></TableHead>
+              <TableHead>Pays</TableHead>
+              <TableHead className="text-right">Total</TableHead>
+              <TableHead className="text-right">Base</TableHead>
+              <TableHead className="text-right">TVA</TableHead>
+              <TableHead className="text-right">Devise</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {data.countries.map((country, idx) => {
+              const key = `${regime}-${country.country}`;
+              const isExpanded = expandedCountries.has(key);
+              const hasDetails = country.details && country.details.length > 0;
+
+              return (
+                <>
+                  {/* Main country row */}
+                  <TableRow 
+                    key={idx}
+                    className={`${hasDetails ? 'cursor-pointer hover:bg-muted/50' : ''} ${isExpanded ? 'bg-muted/30' : ''}`}
+                    onClick={() => hasDetails && toggleCountry(key)}
+                  >
+                    <TableCell>
+                      {hasDetails && (
+                        isExpanded ? 
+                          <ChevronDown className="h-4 w-4" /> : 
+                          <ChevronRight className="h-4 w-4" />
+                      )}
+                    </TableCell>
+                    <TableCell className="font-medium">{country.country}</TableCell>
+                    <TableCell className="text-right">{country.total.toFixed(2)}</TableCell>
+                    <TableCell className="text-right">{country.base.toFixed(2)}</TableCell>
+                    <TableCell className="text-right">{country.vat.toFixed(2)}</TableCell>
+                    <TableCell className="text-right">{country.currency}</TableCell>
+                  </TableRow>
+
+                  {/* Expanded detail rows (SALE/REFUND) */}
+                  {isExpanded && country.details && country.details.map((detail, detailIdx) => (
+                    <TableRow 
+                      key={`${key}-${detailIdx}`}
+                      className={`bg-muted/20 ${detail.type === 'REFUND' ? 'text-destructive' : 'text-green-600'}`}
+                    >
+                      <TableCell></TableCell>
+                      <TableCell className="pl-8">
+                        <span className={`inline-block px-2 py-1 rounded text-xs font-medium ${
+                          detail.type === 'REFUND' 
+                            ? 'bg-destructive/10 text-destructive' 
+                            : 'bg-green-100 text-green-700'
+                        }`}>
+                          {detail.type}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-right font-medium">{detail.total.toFixed(2)}</TableCell>
+                      <TableCell className="text-right">{detail.base.toFixed(2)}</TableCell>
+                      <TableCell className="text-right">{detail.vat.toFixed(2)}</TableCell>
+                      <TableCell className="text-right">{detail.currency}</TableCell>
+                    </TableRow>
+                  ))}
+                </>
+              );
+            })}
+          </TableBody>
+        </Table>
+      </div>
+    );
   };
 
   return (
@@ -109,94 +201,49 @@ const RulesEnginePage = () => {
             </Alert>
           )}
 
-          {/* Consolidated Table */}
+          {/* TVA détaillée - Tabbed Interface */}
           <Card>
             <CardHeader>
-              <CardTitle>📋 Tableau Consolidé (Pays × Catégorie)</CardTitle>
+              <CardTitle>📋 TVA Détaillée</CardTitle>
+              <CardDescription>Vue par régime TVA avec détail SALE/REFUND par pays</CardDescription>
             </CardHeader>
             <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Pays</TableHead>
-                    <TableHead>Catégorie</TableHead>
-                    <TableHead className="text-right">CA HT (€)</TableHead>
-                    <TableHead className="text-right">TVA (€)</TableHead>
-                    <TableHead className="text-right">Transactions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {report.consolidated.map((row, idx) => (
-                    <TableRow key={idx} className={row.pays === 'TOTAL GÉNÉRAL' ? 'font-bold bg-muted' : ''}>
-                      <TableCell>{row.pays}</TableCell>
-                      <TableCell>{row.categorie}</TableCell>
-                      <TableCell className="text-right">{row.ca_ht.toFixed(2)}</TableCell>
-                      <TableCell className="text-right">{row.tva.toFixed(2)}</TableCell>
-                      <TableCell className="text-right">{row.transactions}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
+              <Tabs defaultValue="unionOSS" className="w-full">
+                <TabsList className="grid w-full grid-cols-4">
+                  <TabsTrigger value="unionOSS">UNION-OSS</TabsTrigger>
+                  <TabsTrigger value="regular">REGULAR</TabsTrigger>
+                  <TabsTrigger value="voec">VOEC</TabsTrigger>
+                  <TabsTrigger value="empty">EMPTY</TabsTrigger>
+                </TabsList>
 
-          {/* Domestic VAT Table */}
-          <Card>
-            <CardHeader>
-              <CardTitle>🇪🇺 (A) TVA DOMESTIQUE (REGULAR)</CardTitle>
-              <CardDescription>Pays cibles: FR, DE, ES, IT</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Pays</TableHead>
-                    <TableHead className="text-right">TVA Regular (€)</TableHead>
-                    <TableHead className="text-right">CA HT Regular (€)</TableHead>
-                    <TableHead className="text-right">Transactions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {report.domesticVAT.map((row, idx) => (
-                    <TableRow key={idx}>
-                      <TableCell className="font-medium">{row.pays}</TableCell>
-                      <TableCell className="text-right">{row.tva.toFixed(2)}</TableCell>
-                      <TableCell className="text-right">{row.ca_ht.toFixed(2)}</TableCell>
-                      <TableCell className="text-right">{row.transactions}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
+                <TabsContent value="unionOSS" className="mt-4">
+                  {renderRegimeTable('unionOSS', 'UNION-OSS')}
+                  {report.unionOSS.countries.length === 0 && (
+                    <p className="text-muted-foreground text-center py-8">Aucune transaction UNION-OSS</p>
+                  )}
+                </TabsContent>
 
-          {/* OSS VAT Table */}
-          <Card>
-            <CardHeader>
-              <CardTitle>🌍 (B) TVA OSS</CardTitle>
-              <CardDescription>Détail par pays UE + Total OSS</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Pays de destination (UE)</TableHead>
-                    <TableHead className="text-right">TVA OSS (€)</TableHead>
-                    <TableHead className="text-right">CA HT OSS (€)</TableHead>
-                    <TableHead className="text-right">Transactions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {report.ossVAT.map((row, idx) => (
-                    <TableRow key={idx} className={row.pays === 'TOTAL OSS' ? 'font-bold bg-muted' : ''}>
-                      <TableCell>{row.pays}</TableCell>
-                      <TableCell className="text-right">{row.tva.toFixed(2)}</TableCell>
-                      <TableCell className="text-right">{row.ca_ht.toFixed(2)}</TableCell>
-                      <TableCell className="text-right">{row.transactions}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                <TabsContent value="regular" className="mt-4">
+                  {renderRegimeTable('regular', 'REGULAR')}
+                  {report.regular.countries.length === 0 && (
+                    <p className="text-muted-foreground text-center py-8">Aucune transaction REGULAR</p>
+                  )}
+                </TabsContent>
+
+                <TabsContent value="voec" className="mt-4">
+                  {renderRegimeTable('voec', 'VOEC')}
+                  {report.voec.countries.length === 0 && (
+                    <p className="text-muted-foreground text-center py-8">Aucune transaction VOEC</p>
+                  )}
+                </TabsContent>
+
+                <TabsContent value="empty" className="mt-4">
+                  {renderRegimeTable('empty', 'EMPTY')}
+                  {report.empty.countries.length === 0 && (
+                    <p className="text-muted-foreground text-center py-8">Aucune transaction sans pays</p>
+                  )}
+                </TabsContent>
+              </Tabs>
             </CardContent>
           </Card>
 

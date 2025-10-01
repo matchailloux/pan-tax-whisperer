@@ -68,6 +68,31 @@ interface Anomaly {
   tx_event_id?: string;
 }
 
+// New interfaces for detailed breakdown
+interface TransactionDetail {
+  type: 'SALE' | 'REFUND';
+  total: number;  // TTC
+  base: number;   // HT
+  vat: number;    // TVA
+  currency: string;
+}
+
+interface CountryDetail {
+  country: string;
+  total: number;  // TTC
+  base: number;   // HT
+  vat: number;    // TVA
+  currency: string;
+  details: TransactionDetail[];  // SALE et REFUND
+}
+
+interface RegimeData {
+  countries: CountryDetail[];
+  totalBase: number;
+  totalVat: number;
+  totalTTC: number;
+}
+
 interface DiagnosticInfo {
   columns: Array<{ name: string; samples: string[] }>;
   rowCount: number;
@@ -81,6 +106,11 @@ export interface AdvancedVATReport {
   anomalies: Anomaly[];
   currencies: string[];
   diagnostic: DiagnosticInfo;
+  // New detailed breakdown by regime
+  unionOSS: RegimeData;
+  regular: RegimeData;
+  voec: RegimeData;
+  empty: RegimeData;
 }
 
 // Helper: Clean headers (remove BOM, quotes, trailing "", etc.)
@@ -562,6 +592,121 @@ function generateDiagnostic(rows: CSVRow[], headers: string[], delimiter: string
   };
 }
 
+// Generate detailed regime breakdown
+function generateRegimeBreakdown(transactions: ProcessedTransaction[]): {
+  unionOSS: RegimeData;
+  regular: RegimeData;
+  voec: RegimeData;
+  empty: RegimeData;
+} {
+  const regimes: { [key: string]: Map<string, { sale: TransactionDetail; refund: TransactionDetail }> } = {
+    unionOSS: new Map(),
+    regular: new Map(),
+    voec: new Map(),
+    empty: new Map()
+  };
+
+  // Categorize transactions
+  transactions.forEach(tx => {
+    let regime: string;
+    
+    if (!tx.ARRIVAL_COUNTRY || tx.CATEGORIE === 'A_VERIFIER') {
+      regime = 'empty';
+    } else if (tx.CATEGORIE === 'OSS') {
+      regime = 'unionOSS';
+    } else if (tx.CATEGORIE === 'REGULAR') {
+      regime = 'regular';
+    } else if (tx.TAX_SCHEME?.includes('VOEC') || tx.ARRIVAL_COUNTRY === 'CH') {
+      regime = 'voec';
+    } else {
+      regime = 'empty';
+    }
+
+    const country = tx.ARRIVAL_COUNTRY || 'NO COUNTRY';
+    
+    if (!regimes[regime].has(country)) {
+      regimes[regime].set(country, {
+        sale: { type: 'SALE', total: 0, base: 0, vat: 0, currency: tx.CURRENCY },
+        refund: { type: 'REFUND', total: 0, base: 0, vat: 0, currency: tx.CURRENCY }
+      });
+    }
+
+    const countryData = regimes[regime].get(country)!;
+    const detail = tx.TX_TYPE === 'SALE' ? countryData.sale : countryData.refund;
+    
+    detail.base += tx.HT;
+    detail.vat += tx.TVA;
+    detail.total += tx.HT + tx.TVA;
+  });
+
+  // Convert to RegimeData structure
+  const result: any = {};
+  
+  for (const [regimeName, countryMap] of Object.entries(regimes)) {
+    const countries: CountryDetail[] = [];
+    let totalBase = 0;
+    let totalVat = 0;
+    let totalTTC = 0;
+
+    for (const [country, data] of countryMap.entries()) {
+      const base = Math.round((data.sale.base + data.refund.base) * 100) / 100;
+      const vat = Math.round((data.sale.vat + data.refund.vat) * 100) / 100;
+      const total = Math.round((data.sale.total + data.refund.total) * 100) / 100;
+
+      const details: TransactionDetail[] = [];
+      
+      // Add SALE if exists
+      if (data.sale.total !== 0) {
+        details.push({
+          type: 'SALE',
+          total: Math.round(data.sale.total * 100) / 100,
+          base: Math.round(data.sale.base * 100) / 100,
+          vat: Math.round(data.sale.vat * 100) / 100,
+          currency: data.sale.currency
+        });
+      }
+      
+      // Add REFUND if exists
+      if (data.refund.total !== 0) {
+        details.push({
+          type: 'REFUND',
+          total: Math.round(data.refund.total * 100) / 100,
+          base: Math.round(data.refund.base * 100) / 100,
+          vat: Math.round(data.refund.vat * 100) / 100,
+          currency: data.refund.currency
+        });
+      }
+
+      if (total !== 0) {
+        countries.push({
+          country,
+          total,
+          base,
+          vat,
+          currency: data.sale.currency,
+          details
+        });
+
+        totalBase += base;
+        totalVat += vat;
+        totalTTC += total;
+      }
+    }
+
+    // Sort countries by name
+    countries.sort((a, b) => a.country.localeCompare(b.country));
+
+    result[regimeName] = {
+      countries,
+      totalBase: Math.round(totalBase * 100) / 100,
+      totalVat: Math.round(totalVat * 100) / 100,
+      totalTTC: Math.round(totalTTC * 100) / 100
+    };
+  }
+
+  return result as any;
+}
+
 // Main processing function
 export function processAdvancedVAT(csvContent: string): AdvancedVATReport {
   // Step 1: Detect delimiter
@@ -610,13 +755,25 @@ export function processAdvancedVAT(csvContent: string): AdvancedVATReport {
 
   console.log(`Mapped ${transactions.length} valid transactions`);
 
-  // Step 5: Generate reports
+  // Step 5: Generate old reports (for compatibility)
+  const consolidated = consolidate(transactions);
+  const domestic = getDomesticVAT(transactions);
+  const oss = getOSSVAT(transactions);
+  const anomalies = detectAnomalies(transactions);
+  
+  // Step 6: Generate new detailed breakdown
+  const { unionOSS, regular, voec, empty } = generateRegimeBreakdown(transactions);
+
   return {
-    consolidated: consolidate(transactions),
-    domesticVAT: getDomesticVAT(transactions),
-    ossVAT: getOSSVAT(transactions),
-    anomalies: detectAnomalies(transactions),
+    consolidated,
+    domesticVAT: domestic,
+    ossVAT: oss,
+    anomalies,
     currencies: Array.from(currencies),
-    diagnostic
+    diagnostic,
+    unionOSS,
+    regular,
+    voec,
+    empty
   };
 }
