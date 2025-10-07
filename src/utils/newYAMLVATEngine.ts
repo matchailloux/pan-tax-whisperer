@@ -412,25 +412,25 @@ function parseCSV(csvContent: string): any[] {
   // Retirer un éventuel BOM sur la première ligne
   lines[0] = lines[0].replace(/^\uFEFF/, '');
 
-  // Détection des lignes « entièrement entre guillemets » avec guillemets doublés (cas Amazon)
-  // Exemple: "A3AL...,""2025-MAY"",..." -> la ligne entière est citée et les champs internes ont des "" (doublés)
+  // Détection améliorée: vérifier si chaque ligne commence ET finit par un guillemet
+  // Cas Amazon typique: chaque champ est entre guillemets: "val1","val2","val3"
   const sampleSize = Math.min(lines.length, 50);
-  const wrappedCount = lines.slice(0, sampleSize).filter(l => l.startsWith('"') && l.endsWith('"') && l.includes('""')).length;
-  const isWrapped = wrappedCount > 0 && wrappedCount >= Math.max(3, Math.floor(sampleSize * 0.6));
+  const quotedFields = lines.slice(0, sampleSize).filter(l => {
+    const trimmed = l.trim();
+    // Ligne avec format "champ1","champ2","champ3"
+    return trimmed.startsWith('"') && trimmed.endsWith('"') && trimmed.includes('","');
+  }).length;
+  
+  const isWrapped = quotedFields > sampleSize * 0.5;
 
   if (isWrapped) {
-    // On retire l'enveloppe externe et on dés-échappe les guillemets doublés
-    lines = lines.map(l => {
-      let s = l.replace(/^\uFEFF?"/, '');
-      s = s.replace(/"$/, '');
-      s = s.replace(/""/g, '"');
-      return s;
-    });
+    // Pas besoin de transformation supplémentaire, parseCSVLine gère les guillemets
+    console.log('🔧 CSV avec champs entre guillemets détecté');
   }
 
   const firstLine = lines[0];
   const delimiter = detectDelimiter(firstLine);
-  console.log(`🧭 Délimiteur détecté: "${delimiter === '\t' ? 'TAB' : delimiter}"${isWrapped ? ' • normalisation guillemets appliquée' : ''}`);
+  console.log(`🧭 Délimiteur détecté: "${delimiter === '\t' ? 'TAB' : delimiter}"`);
 
   const rawHeaders = parseCSVLine(firstLine, delimiter);
   const normalizeHeader = (h: string) =>
@@ -443,9 +443,20 @@ function parseCSV(csvContent: string): any[] {
       .replace(/^_|_$/g, '');
   const headers = rawHeaders.map(normalizeHeader);
 
+  // Log diagnostic pour vérifier les colonnes importantes
+  const importantCols = ['TRANSACTION_TYPE', 'TOTAL_ACTIVITY_VALUE_AMT_VAT_EXCL', 'PRICE_OF_ITEMS_AMT_VAT_EXCL', 'PRICE_OF_ITEMS_VAT_RATE_PERCENT'];
+  const foundCols = importantCols.filter(col => headers.includes(col));
+  console.log(`🔍 Colonnes clés trouvées: ${foundCols.join(', ')} (${foundCols.length}/${importantCols.length})`);
+
   const transactions: any[] = [];
   for (let i = 1; i < lines.length; i++) {
     const values = parseCSVLine(lines[i], delimiter);
+    
+    // Vérifier l'alignement colonnes/valeurs
+    if (i === 1 && values.length !== headers.length) {
+      console.warn(`⚠️ Désalignement détecté: ${headers.length} colonnes vs ${values.length} valeurs à la ligne 2`);
+    }
+    
     const tx: any = {};
     headers.forEach((header, idx) => {
       const value = values[idx] ?? '';
@@ -453,6 +464,18 @@ function parseCSV(csvContent: string): any[] {
     });
     transactions.push(tx);
   }
+  
+  // Log diagnostic première transaction
+  if (transactions.length > 0) {
+    const first = transactions[0];
+    console.log('🔎 Première transaction parsée:', {
+      TRANSACTION_TYPE: first.TRANSACTION_TYPE,
+      TOTAL_ACTIVITY_VALUE_AMT_VAT_EXCL: first.TOTAL_ACTIVITY_VALUE_AMT_VAT_EXCL,
+      PRICE_OF_ITEMS_AMT_VAT_EXCL: first.PRICE_OF_ITEMS_AMT_VAT_EXCL,
+      VAT_RATE: first.PRICE_OF_ITEMS_VAT_RATE_PERCENT
+    });
+  }
+  
   return transactions;
 }
 
@@ -606,8 +629,9 @@ for (const tx of transactions) {
 
   let amountStr = '';
   let amountRaw = 0;
+  let amountSource = '';
 
-  const tryKeys = (keys: string[], requireNonZero: boolean) => {
+  const tryKeys = (keys: string[], requireNonZero: boolean, source: string) => {
     for (const k of keys) {
       const val = (tx as any)[k];
       const s = val !== undefined && val !== null ? String(val).trim() : '';
@@ -616,6 +640,7 @@ for (const tx of transactions) {
       if (!isNaN(n) && (!requireNonZero || n !== 0)) {
         amountStr = s;
         amountRaw = n;
+        amountSource = `${source}:${k}`;
         return true;
       }
     }
@@ -623,12 +648,27 @@ for (const tx of transactions) {
   };
 
   // 2 passes: préférer une valeur non nulle si possible
-  if (!tryKeys(vatExclKeys, true))
-    if (!tryKeys(vatExclKeys, false))
-      if (!tryKeys(vatInclKeys, true))
-        if (!tryKeys(vatInclKeys, false))
-          if (!tryKeys(genericAmountKeys, true))
-            tryKeys(genericAmountKeys, false);
+  if (!tryKeys(vatExclKeys, true, 'VAT_EXCL'))
+    if (!tryKeys(vatExclKeys, false, 'VAT_EXCL'))
+      if (!tryKeys(vatInclKeys, true, 'VAT_INCL'))
+        if (!tryKeys(vatInclKeys, false, 'VAT_INCL'))
+          if (!tryKeys(genericAmountKeys, true, 'GENERIC'))
+            tryKeys(genericAmountKeys, false, 'GENERIC');
+
+  // NOUVEAU: Fallback robuste via reconstruction si TOTAL_ACTIVITY_VALUE_AMT_VAT_EXCL est vide/0
+  // Recalculer: PRICE_OF_ITEMS + SHIP_CHARGE + GIFT_WRAP (tous VAT_EXCL)
+  if (amountRaw === 0) {
+    const priceItems = parseAmount(String((tx as any).PRICE_OF_ITEMS_AMT_VAT_EXCL ?? (tx as any).TOTAL_PRICE_OF_ITEMS_AMT_VAT_EXCL ?? '0'));
+    const shipCharge = parseAmount(String((tx as any).SHIP_CHARGE_AMT_VAT_EXCL ?? (tx as any).TOTAL_SHIP_CHARGE_AMT_VAT_EXCL ?? '0'));
+    const giftWrap = parseAmount(String((tx as any).GIFT_WRAP_AMT_VAT_EXCL ?? (tx as any).TOTAL_GIFT_WRAP_AMT_VAT_EXCL ?? '0'));
+    
+    const reconstructed = priceItems + shipCharge + giftWrap;
+    if (reconstructed > 0) {
+      amountRaw = reconstructed;
+      amountSource = 'RECONSTRUCTED';
+      amountStr = reconstructed.toFixed(2);
+    }
+  }
 
   // Fallback heuristique: première colonne plausible si rien trouvé
   if (!amountStr) {
@@ -636,7 +676,12 @@ for (const tx of transactions) {
       const keyU = key.toUpperCase();
       if (/(AMOUNT|AMT|VALUE|PRICE|TOTAL)/.test(keyU) && !/(TAX_RATE|VAT_RATE|PERCENT|QTY|QUANTITY|COUNT)/.test(keyU)) {
         const s = String(val ?? '').trim();
-        if (s && /[0-9]/.test(s)) { amountStr = s; amountRaw = parseAmount(s); break; }
+        if (s && /[0-9]/.test(s)) { 
+          amountStr = s; 
+          amountRaw = parseAmount(s); 
+          amountSource = `HEURISTIC:${key}`;
+          break; 
+        }
       }
     }
   }
@@ -720,6 +765,13 @@ for (const tx of transactions) {
     const sample = processed.slice(0, 3);
     console.log(`🧮 Résumé preprocessing → total: ${processed.length}, montants non nuls: ${nonZero}, montants nuls: ${zeroAmounts}`);
     console.debug('🔎 Échantillon transactions (après normalisation):', sample);
+    
+    // Diagnostic si beaucoup de montants nuls
+    if (zeroAmounts > processed.length * 0.5) {
+      console.warn(`⚠️ ATTENTION: ${zeroAmounts} transactions avec montant nul (>${Math.round(zeroAmounts/processed.length*100)}%)`);
+      const zeroSample = processed.filter(p => p.AMOUNT_RAW === 0).slice(0, 2);
+      console.warn('Échantillon transactions à 0:', zeroSample);
+    }
   }
 
   return processed;
