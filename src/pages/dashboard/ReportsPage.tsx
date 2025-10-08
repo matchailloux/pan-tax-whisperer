@@ -49,9 +49,12 @@ import { useVATReports } from '@/hooks/useVATReports';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { NewVATBreakdown } from '@/components/NewVATBreakdown';
+import { exportVATReportToExcel } from '@/utils/excelExport';
+import { useToast } from '@/hooks/use-toast';
 
 const ReportsPage = () => {
   const { reports, loading, deleteReport, getReportsStats } = useVATReports();
+  const { toast } = useToast();
   const [searchTerm, setSearchTerm] = useState('');
   const [periodFilter, setPeriodFilter] = useState<string>('all');
   const [viewMode, setViewMode] = useState<'list' | 'charts'>('list');
@@ -141,7 +144,20 @@ const ReportsPage = () => {
   };
 
   const exportToExcel = (report: any) => {
-    console.log('Export Excel pour:', report.report_name);
+    try {
+      exportVATReportToExcel(report.report_data, report.report_name);
+      toast({
+        title: "Export réussi",
+        description: `Le rapport "${report.report_name}" a été exporté en Excel`,
+      });
+    } catch (error) {
+      console.error('Error exporting to Excel:', error);
+      toast({
+        title: "Erreur d'export",
+        description: "Impossible d'exporter le rapport en Excel",
+        variant: "destructive",
+      });
+    }
   };
 
   const handleViewReport = (report: any) => {

@@ -29,13 +29,7 @@ export const useVATReports = () => {
       setLoading(true);
       const { data, error } = await supabase
         .from('vat_reports')
-        .select(`
-          *,
-          user_files (
-            file_name,
-            upload_date
-          )
-        `)
+        .select('*')
         .eq('user_id', user.id)
         .order('created_at', { ascending: false });
 
