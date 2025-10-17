@@ -13,8 +13,8 @@ import {
   HelpCircle,
   LogOut,
   Bell,
-  Scale
-  
+  Scale,
+  Package
 } from 'lucide-react';
 import {
   Sidebar,
@@ -50,6 +50,11 @@ const individualMenuItems = [
     title: "Rapports",
     url: "/dashboard/reports",
     icon: BarChart3,
+  },
+  {
+    title: "Produits",
+    url: "/dashboard/products",
+    icon: Package,
   },
   {
     title: "Activité",

@@ -14,6 +14,7 @@ import SettingsLayout from '@/pages/dashboard/settings/SettingsLayout';
 import SettingsPage from '@/pages/dashboard/SettingsPage';
 import JurisdictionsPage from '@/pages/dashboard/settings/JurisdictionsPage';
 import HelpPage from '@/pages/dashboard/HelpPage';
+import ProductAnalysisPage from '@/pages/dashboard/ProductAnalysisPage';
 import FirmDashboard from '@/pages/dashboard/FirmDashboard';
 import FirmClients from '@/pages/dashboard/FirmClients';
 import FirmClientDetails from '@/pages/dashboard/FirmClientDetails';
@@ -62,6 +63,7 @@ const DashboardRoutes = () => {
         <Route path="analysis" element={<AnalysisPage />} />
         <Route path="documents" element={<DocumentsPage />} />
         <Route path="reports" element={<ReportsPage />} />
+        <Route path="products" element={<ProductAnalysisPage />} />
         <Route path="activity" element={<ActivityPage />} />
         <Route path="compliance" element={<CompliancePage />} />
         
